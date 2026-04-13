@@ -1,0 +1,15 @@
+.git
+.vscode
+.pytest_cache
+.env
+frontend/node_modules
+frontend/dist
+backend_main/ths_trade/venv
+debug
+backups
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+Output*.txt
+TestOutput.txt

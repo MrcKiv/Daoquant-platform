@@ -1,0 +1,92 @@
+.strategy-selection {
+  width: 100%;
+  position: absolute;
+  top: 560px;
+  left: 0;
+  
+  .section-title {
+    text-align: center;
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 40px;
+  }
+
+  .card-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 30px;
+  }
+
+  .strategy-card {
+    width: 320px;
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.3s ease;
+
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .strategy-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .strategy-chart {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+
+    .strategy-info {
+      .info-row {
+        display: flex;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #333;
+        justify-content: space-between;
+
+        span {
+          margin-bottom: 6px;
+          min-width: 80px;
+        }
+
+        .highlight {
+          color: #e91e63;
+          font-weight: bold;
+        }
+      }
+    }
+
+    .strategy-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 16px;
+      font-size: 13px;
+
+      .get-btn {
+        background-color: #2962ff;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+
+        &:hover {
+          background-color: #0039cb;
+        }
+      }
+    }
+  }
+}

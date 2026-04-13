@@ -1,0 +1,79 @@
+.footer {
+  background-color: #1f1f1f;
+  color: #fff;
+  width: 100%;       /* ✅ 用 100%，而非 100vw */
+  font-size: 14px;
+  position: absolute;
+  top:2274.5px;
+  left: 0;
+}
+
+.footer-container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 10px 20px 10px;
+  display: flex;
+  gap: 250px;
+}
+
+/* 左三栏区域 */
+.footer-columns {
+  display: flex;
+  justify-content: flex-start;
+  gap: 100px;
+  flex-wrap: wrap;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+}
+
+.column h6 {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.column a {
+  color: #fff;
+  margin-bottom: 6px;
+  text-decoration: none;
+}
+
+.column a:hover {
+  color: #3da6ff; 
+}
+
+/* 右侧二维码区域 */
+.qrcode-group {
+  display: flex;
+  gap: 80px;
+  margin-right: 20px;
+  margin-top: 50px;
+}
+
+.qrcode {
+  text-align: center;
+}
+
+.qrcode img {
+  width: 90px;
+  height: 90px;
+  border-radius: 6px;
+}
+
+.qrcode p {
+  font-size: 13px;
+  color: #ccc;
+}
+
+/* 底部版权信息 */
+.footer-bottom {
+  text-align: center;
+  background: #000000;
+  color: #ffffff;
+  font-size: 12px;
+  padding-top: 10px;
+}

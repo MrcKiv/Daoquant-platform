@@ -1,0 +1,13 @@
+{
+  "timestamp": "20250902_023126",
+  "clustering_method": "K-means with Elbow Method",
+  "clustering_results_file": "clustering_results_elbow_20250902_023126.pkl",
+  "sequences_file": "extracted_sequences_elbow_20250902_023126.pkl",
+  "elbow_method_file": "elbow_method_details_20250902_023126.json",
+  "config": {
+    "WINDOW_SIZE": 60,
+    "OBSERVATION_DAYS": 5,
+    "TARGET_GAIN": 0.1,
+    "MIN_SAMPLE_SIZE": 10
+  }
+}

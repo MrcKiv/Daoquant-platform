@@ -1,0 +1,52 @@
+.sponsor-container {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  background-color: #f7f7f9;
+  overflow: hidden;
+  position: absolute;
+  top:1954.5px;
+  left: 0;
+}
+
+.sponsor-background {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1920px;
+  height: 100%;
+  background-image: url('/images/common/partner.png'); /* 你的背景图路径 */
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  transform: translateX(-50%) scale(1.5);
+  transition: transform 0.6s ease;
+  z-index: 1;
+}
+
+.sponsor-container:hover .sponsor-background {
+  transform: translateX(-50%) scale(1);
+}
+
+.sponsor-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.sponsor-content h2 {
+  background:white;
+  font-size: 30px;
+  color: #575151;
+  font-weight: 600;
+}
+
+.sponsor-content .highlight {
+  color: #575151;
+  font-weight: bold;
+  font-size: 28px;
+}

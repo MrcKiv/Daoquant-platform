@@ -1,0 +1,81 @@
+.footer {
+  background-color: #1f1f1f;
+  color: #fff;
+  width: 100%;       /* ✅ 用 100%，而非 100vw */
+  font-size: 14px;
+  position: absolute;
+  top:680px;
+  left: 0;
+}
+.auth-bg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #0a33ea;
+  position: absolute;
+  top: 150px;
+  left: 700px;
+}
+
+.auth-card {
+  background: white;
+  padding: 2rem 2.5rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  width: 350px;
+}
+
+.title {
+  text-align: center;
+  color: #1573e6;
+  font-weight: 700;
+  font-size: 24px;
+  margin-bottom: 1.5rem;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  color: #1573e6;
+  margin: 0.5rem 0 0.2rem;
+}
+
+input {
+  width: 100%;
+  padding: 0.6rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+button {
+  width: 100%;
+  padding: 0.7rem;
+  background-color: #1573e6;
+  color: white;
+  font-weight: bold;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.links {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 14px;
+  color: #444;
+}
+
+.links span {
+  color: #1573e6;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.forgot {
+  text-align: center;
+  color: #1573e6;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
