@@ -28,3 +28,4 @@ backend_main/backend/supervised_model.pkl
 *.log
 .DS_Store
 Thumbs.db
+docker/mysql/init/jdgp.sql

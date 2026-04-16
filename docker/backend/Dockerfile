@@ -18,7 +18,8 @@ RUN pip install --upgrade pip \
 COPY backend_main /app/backend_main
 COPY docker/backend/entrypoint.sh /app/entrypoint.sh
 
-RUN chmod +x /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh \
+    && chmod +x /app/entrypoint.sh
 
 WORKDIR /app/backend_main
 
