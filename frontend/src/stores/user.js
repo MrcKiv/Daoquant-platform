@@ -35,31 +35,44 @@ export const useUserStore = defineStore('user', {
 
     isVipActive: (state) => {
       if (!state.user) return false
-      // 检查会员是否过期
+      if (state.user.membership_level === 'admin') return true
+      if (state.user.membership_level === 'free') return false
+
       if (state.user.membership_expiry) {
         const expiryDate = new Date(state.user.membership_expiry)
         return expiryDate > new Date()
       }
       return true
+    },
+
+    isAdmin: (state) => {
+      return state.user?.membership_level === 'admin'
     }
   },
 
   actions: {
-    // 用户登录
     login(userData) {
       this.user = userData
       this.isLoggedIn = true
     },
 
-    // 用户登出
-    logout() {
+    clearAuthState() {
       this.user = null
       this.isLoggedIn = false
-      // 可以调用后端登出接口
-      // axios.post('/api/user/logout/', {}, { withCredentials: true })
     },
 
-    // 更新用户信息
+    async logout() {
+      try {
+        await axios.post('/api/user/logout/', {}, {
+          withCredentials: true
+        })
+      } catch (error) {
+        console.warn('后端登出失败，已清理本地登录状态', error)
+      } finally {
+        this.clearAuthState()
+      }
+    },
+
     updateUserInfo(userData) {
       if (this.user) {
         this.user = { ...this.user, ...userData }
@@ -68,7 +81,6 @@ export const useUserStore = defineStore('user', {
       }
     },
 
-    // 权限检查方法
     hasPermission(requiredLevel) {
       if (!this.user) return false
 
@@ -76,11 +88,15 @@ export const useUserStore = defineStore('user', {
         'free': 0,
         'basic': 1,
         'premium': 2,
-        'vip': 3
+        'vip': 3,
+        'admin': 4
       }
 
-      // 如果会员已过期，降级为免费用户
       let userLevel = this.user.membership_level
+      if (userLevel === 'admin') {
+        return true
+      }
+
       if (!this.isVipActive && userLevel !== 'free') {
         userLevel = 'free'
       }

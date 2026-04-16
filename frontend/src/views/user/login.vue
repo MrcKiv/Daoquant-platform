@@ -91,11 +91,13 @@
       </form>
 
       <p class="links">
-        没有账号？
-        <router-link to="/register" class="btn-outline">立即注册</router-link>
+        账号由管理员统一开通
       </p>
       <p class="forgot">
         <router-link to="/reset">忘记密码？</router-link>
+      </p>
+      <p class="forgot">
+        <router-link to="/manage/login">管理员登录</router-link>
       </p>
     </div>
   </div>
@@ -153,4 +155,8 @@ const login = async () => {
 
 <style scoped>
 @import  '../../assets/css/user/login.css';
+
+.links {
+  color: #666;
+}
 </style>

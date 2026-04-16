@@ -10,7 +10,8 @@ class User(models.Model):
         ('free', '免费用户'),
         ('basic', '基础会员'),
         ('premium', '高级会员'),
-        ('vip', 'VIP会员')
+        ('vip', 'VIP会员'),
+        ('admin', '管理员')
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -39,7 +40,9 @@ class User(models.Model):
         return f"{self.name} ({self.usernumber})"
 
     def is_vip_active(self):
-        """检查VIP权限是否有效"""
+        """检查账号权限是否有效"""
+        if self.membership_level == 'admin':
+            return True
         if self.membership_level == 'free':
             return False
         if not self.membership_expiry:
@@ -52,8 +55,12 @@ class User(models.Model):
             'free': 0,
             'basic': 1,
             'premium': 2,
-            'vip': 3
+            'vip': 3,
+            'admin': 4
         }
+
+        if self.membership_level == 'admin':
+            return True
 
         if not self.is_vip_active():
             return level_hierarchy.get('free', 0) >= level_hierarchy.get(required_level, 0)

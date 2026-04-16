@@ -72,6 +72,7 @@
           <ul class="dropdown-menu">
             <li><router-link to="/user-strategy">我的策略</router-link></li>
             <li><router-link to="/user/profile">个人资料</router-link></li>
+            <li v-if="userStore.hasPermission('admin')"><router-link to="/manage/users">后台管理</router-link></li>
             <li><router-link to="/membership/upgrade">会员升级</router-link></li>
             <li><a @click.prevent="handleLogout">退出登录</a></li>
           </ul>
@@ -80,7 +81,6 @@
 
       <!-- 未登录 -->
       <div class="c-header-right" v-else>
-        <router-link to="/register" class="btn-primary">免费注册</router-link>
         <router-link to="/login" class="btn-outline">登录</router-link>
       </div>
     </div>
@@ -91,7 +91,6 @@
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import axios from 'axios'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -102,7 +101,8 @@ const getMembershipLevelText = (level) => {
     'free': '免费用户',
     'basic': '基础会员',
     'premium': '高级会员',
-    'vip': 'VIP会员'
+    'vip': 'VIP会员',
+    'admin': '管理员'
   }
   return levelMap[level] || '免费用户'
 }
@@ -130,11 +130,7 @@ const checkAuthAndGo = async (path) => {
 
 const handleLogout = async () => {
   try {
-    // 调用后端登出接口（如果有的话）
-    // await axios.post('/api/user/logout/', {}, { withCredentials: true })
-
-    // 清除用户Store
-    userStore.logout()
+    await userStore.logout()
 
     ElMessage.success('退出登录成功')
     router.push('/')
@@ -173,6 +169,10 @@ const handleLogout = async () => {
 
 .user-level.vip {
   background-color: #E6A23C;
+}
+
+.user-level.admin {
+  background-color: #d14343;
 }
 
 /* 确保下拉菜单中的链接样式正确 */

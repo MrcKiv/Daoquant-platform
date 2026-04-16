@@ -5,7 +5,6 @@
         <div class="banner-info-head">量化投研, 从内部自用开始</div>
         <div class="banner-info-text">我们提供免费的量化策略、投研工具、最先进的股票诊断、在线交流社区</div>
         <div class="banner-info-login" v-if="!userStore.isLoggedIn">
-          <router-link to="/register" class="banner-register">立即注册</router-link>
           <router-link to="/login" class="banner-login">登录</router-link>
         </div>
       </div>

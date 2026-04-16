@@ -7,6 +7,13 @@
       <div class="upgrade-header">
         <h1>会员升级</h1>
         <p>解锁更多高级功能，提升您的策略开发体验</p>
+        <el-alert
+          v-if="currentLevel === 'admin'"
+          title="管理员账号已拥有最高权限，无需升级。"
+          type="success"
+          :closable="false"
+          class="admin-alert"
+        />
       </div>
 
       <div class="membership-plans">
@@ -166,7 +173,8 @@ const levelHierarchy = {
   'free': 0,
   'basic': 1,
   'premium': 2,
-  'vip': 3
+  'vip': 3,
+  'admin': 4
 }
 
 // 检查是否可以升级到指定等级
@@ -211,7 +219,8 @@ const getLevelName = (level) => {
     'free': '免费用户',
     'basic': '基础会员',
     'premium': '高级会员',
-    'vip': 'VIP会员'
+    'vip': 'VIP会员',
+    'admin': '管理员'
   }
   return names[level] || level
 }
@@ -253,6 +262,11 @@ const goBack = () => {
 .upgrade-header p {
   font-size: 16px;
   color: #666;
+}
+
+.admin-alert {
+  margin: 20px auto 0;
+  max-width: 520px;
 }
 
 .membership-plans {

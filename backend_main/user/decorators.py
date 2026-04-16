@@ -8,7 +8,7 @@ from .models import User
 def permission_required(required_level):
     """
     权限检查装饰器
-    required_level: 所需权限等级 ('free', 'basic', 'premium', 'vip')
+    required_level: 所需权限等级 ('free', 'basic', 'premium', 'vip', 'admin')
     """
 
     def decorator(view_func):
@@ -27,7 +27,7 @@ def permission_required(required_level):
             # 检查会员是否过期并更新状态
             if (user.membership_expiry and
                     user.membership_expiry < timezone.now() and
-                    user.membership_level != 'free'):
+                    user.membership_level not in ('free', 'admin')):
                 user.membership_level = 'free'
                 user.membership_expiry = None
                 user.save()
