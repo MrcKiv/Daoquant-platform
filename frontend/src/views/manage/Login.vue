@@ -2,15 +2,11 @@
   <div class="manage-login-page">
     <div class="manage-login-shell">
       <section class="manage-brand-panel">
-        <p class="eyebrow">Daoquant Admin</p>
+        <p class="eyebrow">TAOTAO Admin</p>
         <h1>后台管理中心</h1>
         <p class="description">
           账号开通、级别分配和管理员入口统一在这里处理。
         </p>
-        <div class="default-account">
-          <span>默认管理员账号：`admin`</span>
-          <span>默认管理员密码：`admin`</span>
-        </div>
       </section>
 
       <section class="manage-login-card">
@@ -49,8 +45,8 @@ const router = useRouter()
 const userStore = useUserStore()
 const submitting = ref(false)
 const form = reactive({
-  usernumber: 'admin',
-  password: 'admin'
+  usernumber: '',
+  password: ''
 })
 
 onMounted(() => {
@@ -139,17 +135,6 @@ const handleLogin = async () => {
   max-width: 420px;
   line-height: 1.8;
   color: rgba(255, 255, 255, 0.82);
-}
-
-.default-account {
-  margin-top: 32px;
-  display: grid;
-  gap: 12px;
-  padding: 20px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  font-family: Consolas, 'Courier New', monospace;
 }
 
 .manage-login-card {

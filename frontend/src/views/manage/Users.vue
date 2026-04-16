@@ -2,7 +2,7 @@
   <div class="manage-users-page">
     <header class="manage-header">
       <div>
-        <p class="eyebrow">Daoquant Admin</p>
+        <p class="eyebrow">TAOTAO Admin</p>
         <h1>账号管理</h1>
         <p class="description">创建账号、分配级别，并限制只有 `admin` 级别账号可进入后台。</p>
       </div>
@@ -17,7 +17,7 @@
       <section class="panel create-panel">
         <div class="panel-title">
           <h2>新增账号</h2>
-          <p>除默认管理员 `admin/admin` 外，其余账号统一使用 11 位数字账号。</p>
+          <p>新增账号统一使用 11 位数字账号。</p>
         </div>
 
         <form class="create-form" @submit.prevent="handleCreateUser">
