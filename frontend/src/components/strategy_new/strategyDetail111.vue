@@ -3,7 +3,7 @@
     <!-- 页眉 -->
     <div class="header running-header">
       <div class="header-content">
-        <span>山西量道科技有限公司</span>
+        <span>内部自用</span>
         <span class="page-number"></span>
       </div>
     </div>
@@ -16,7 +16,7 @@
           <!-- 替换 logo-placeholder 为实际图片 -->
           <img src="/images/logo/logo_mql.jpg" alt="Logo" style="width: 100px; height: 100px; border: 1px dashed #999;">
         </div>
-        <h1 style="font-size: 28px; font-weight: bold; color: #000; margin: 60px 0 30px;">山西量道科技有限公司</h1>
+        <h1 style="font-size: 28px; font-weight: bold; color: #000; margin: 60px 0 30px;">内部自用</h1>
         <h2 style="font-size: 24px; font-weight: bold; color: #000; margin: 20px 0;">策略详情</h2>
         <div class="report-info">
           <p><strong>策略名称：</strong>{{ strategyName || '未命名策略' }}</p>

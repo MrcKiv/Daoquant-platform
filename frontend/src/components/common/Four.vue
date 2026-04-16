@@ -33,7 +33,7 @@ const router = useRouter()
 const banners = [
   {
     image: '/images/common/lbt1.jpg',
-    title: 'DaoQuant 星火计划',
+    title: '内部自用 星火计划',
     subtitle: '邀请好友，一起领币，赚佣金',
     route: '/spark/plan'
   },

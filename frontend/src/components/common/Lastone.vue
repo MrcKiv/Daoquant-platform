@@ -4,11 +4,11 @@
       <!-- 左侧三栏 -->
       <div class="footer-columns">
            <div class="column">
-            <h6>关于 DaoQuant</h6>
+            <h6>关于 内部自用</h6>
             <router-link to="/about">关于我们</router-link>
             <router-link to="/join">加入我们</router-link>
             <router-link to="/contact">商务合作</router-link>
-            <router-link to="/company">量道科技</router-link>
+            <router-link to="/company">内部自用</router-link>
             <router-link to="/terms">用户条款</router-link>
             <router-link to="/privacy">隐私协议</router-link>
           </div>
@@ -47,7 +47,7 @@
     </div>
      <!-- 底部版权 -->
     <div class="footer-bottom">
-      ©2025 DaoQuant.com - 晋ICP备16017083号-1
+      ©2025 内部自用 - 晋ICP备16017083号-1
     </div>
   </footer>
 </template>

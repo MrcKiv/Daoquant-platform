@@ -3,7 +3,7 @@
     <div class="c-header-wrapper">
       <!-- 左侧部分：Logo + 专业版按钮 -->
       <div class="c-header-left">
-        <div class="header-logo">DaoQuant</div>
+        <div class="header-logo">内部自用</div>
         <a class="c-header-button" href="https://www.baidu.com" target="_blank">了解专业版</a>
       </div>
 
