@@ -57,6 +57,7 @@ docker compose up -d --build
 ```
 
 注意：这个目录下的初始化脚本只会在 `mysql_data` 卷为空时执行一次。
+默认配置已经放宽了数据库健康检查，并把 `MYSQL_INNODB_REDO_LOG_CAPACITY` 提高到 `1G`，更适合首次导入较大的 SQL。
 
 ### 方式 2：容器启动后手动导入
 
@@ -87,6 +88,7 @@ docker compose up -d --build
 
 - `FRONTEND_PORT`
 - `MYSQL_PORT`
+- `MYSQL_INNODB_REDO_LOG_CAPACITY`
 - `DJANGO_ALLOWED_HOSTS`
 - `DJANGO_CSRF_TRUSTED_ORIGINS`
 - `MYSQL_ROOT_PASSWORD`

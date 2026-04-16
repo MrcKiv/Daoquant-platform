@@ -7,6 +7,7 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      - --innodb-redo-log-capacity=${MYSQL_INNODB_REDO_LOG_CAPACITY:-1G}
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-jdgp}
       MYSQL_USER: ${MYSQL_USER:-daoquant}
@@ -19,9 +20,10 @@ services:
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 10m
 
   backend:
     build:

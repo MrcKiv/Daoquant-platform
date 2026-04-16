@@ -138,6 +138,17 @@ docker/mysql/init/jdgp.sql
 - `.sql.gz`
 - `.sh`
 
+默认部署已经针对“大体积首次导入”做了两项更保守的处理：
+
+- `db` 健康检查增加了更长的 `start_period`，并提高了 `retries`
+- MySQL 默认启用 `innodb_redo_log_capacity=1G`
+
+如果你的 SQL 特别大，还可以在 `.env` 中继续覆盖：
+
+```env
+MYSQL_INNODB_REDO_LOG_CAPACITY=2G
+```
+
 ## 第六步：首次启动服务
 
 在项目根目录执行：
@@ -282,6 +293,23 @@ FRONTEND_PORT=8081
 
 ```text
 http://部署机局域网IP:8081
+```
+
+### 5. 首次导入大 SQL 很慢，甚至看起来像卡住了，怎么办？
+
+先不要急着判断失败，首次导入大 SQL 时，`db` 容器可能会花比较长时间初始化。  
+当前默认配置已经放宽了数据库健康检查，并把 `innodb_redo_log_capacity` 提高到 `1G`。
+
+如果导入数据量更大，可以在 `.env` 中继续调高：
+
+```env
+MYSQL_INNODB_REDO_LOG_CAPACITY=2G
+```
+
+然后重新启动：
+
+```powershell
+docker compose up -d --build
 ```
 
 ## 后续更新项目
