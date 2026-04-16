@@ -89,6 +89,13 @@ def _ensure_default_admin_user():
     )
 
 
+def _get_target_user(user_id):
+    try:
+        return User.objects.get(id=user_id), None
+    except User.DoesNotExist:
+        return None, JsonResponse({'msg': '用户不存在'}, status=404)
+
+
 def register(request):
     return JsonResponse({'msg': '系统已关闭注册功能，请联系管理员开通账号'}, status=403)
 
@@ -237,10 +244,9 @@ def admin_update_user_level(request, user_id):
     if membership_level not in ALLOWED_MEMBERSHIP_LEVELS:
         return JsonResponse({'msg': '无效的账号级别'}, status=400)
 
-    try:
-        target_user = User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        return JsonResponse({'msg': '用户不存在'}, status=404)
+    target_user, error_response = _get_target_user(user_id)
+    if error_response:
+        return error_response
 
     if target_user.usernumber == DEFAULT_ADMIN_USERNUMBER and membership_level != 'admin':
         return JsonResponse({'msg': '默认管理员账号不能移出admin级别'}, status=400)
@@ -256,4 +262,54 @@ def admin_update_user_level(request, user_id):
     return JsonResponse({
         'msg': '账号级别更新成功',
         'user': _user_payload(target_user),
+    })
+
+
+@permission_required('admin')
+def admin_update_user_password(request, user_id):
+    if request.method not in ('PATCH', 'POST'):
+        return JsonResponse({'msg': '仅支持PATCH或POST请求'}, status=405)
+
+    data = _parse_json(request)
+    if data is None:
+        return JsonResponse({'msg': '请求体不是有效的JSON'}, status=400)
+
+    password = data.get('password')
+    if not isinstance(password, str) or not password.strip():
+        return JsonResponse({'msg': '新密码不能为空'}, status=400)
+
+    target_user, error_response = _get_target_user(user_id)
+    if error_response:
+        return error_response
+
+    target_user.password = password.strip()
+    target_user.save()
+
+    return JsonResponse({
+        'msg': '账号密码修改成功',
+        'user': _user_payload(target_user),
+    })
+
+
+@permission_required('admin')
+def admin_delete_user(request, user_id):
+    if request.method not in ('DELETE', 'POST'):
+        return JsonResponse({'msg': '仅支持DELETE或POST请求'}, status=405)
+
+    target_user, error_response = _get_target_user(user_id)
+    if error_response:
+        return error_response
+
+    if target_user.usernumber == DEFAULT_ADMIN_USERNUMBER:
+        return JsonResponse({'msg': '默认管理员账号不能删除'}, status=400)
+
+    if str(target_user.id) == str(request.user.id):
+        return JsonResponse({'msg': '当前登录管理员不能删除自己'}, status=400)
+
+    deleted_user = _user_payload(target_user)
+    target_user.delete()
+
+    return JsonResponse({
+        'msg': '账号删除成功',
+        'user': deleted_user,
     })

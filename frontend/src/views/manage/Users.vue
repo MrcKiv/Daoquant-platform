@@ -87,10 +87,71 @@
                 {{ formatDate(row.created_at) }}
               </template>
             </el-table-column>
+            <el-table-column label="操作" min-width="220" fixed="right">
+              <template #default="{ row }">
+                <div class="row-actions">
+                  <el-button
+                    size="small"
+                    @click="openPasswordDialog(row)"
+                  >
+                    修改密码
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    :disabled="!canDeleteUser(row)"
+                    @click="handleDeleteUser(row)"
+                  >
+                    删除账号
+                  </el-button>
+                </div>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </section>
     </main>
+
+    <el-dialog
+      v-model="passwordDialogVisible"
+      title="修改账号密码"
+      width="420px"
+      :close-on-click-modal="false"
+      @closed="resetPasswordForm"
+    >
+      <div class="password-dialog">
+        <p class="dialog-user">
+          当前账号：{{ passwordForm.usernumber || '--' }}
+        </p>
+
+        <label>新密码</label>
+        <input
+          v-model="passwordForm.password"
+          type="password"
+          placeholder="请输入新密码"
+        />
+
+        <label>确认新密码</label>
+        <input
+          v-model="passwordForm.confirmPassword"
+          type="password"
+          placeholder="请再次输入新密码"
+        />
+      </div>
+
+      <template #footer>
+        <div class="dialog-actions">
+          <el-button @click="passwordDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="passwordSubmitting"
+            @click="handlePasswordUpdate"
+          >
+            保存新密码
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -98,7 +159,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -106,6 +167,8 @@ const userStore = useUserStore()
 
 const loading = ref(false)
 const submitting = ref(false)
+const passwordSubmitting = ref(false)
+const passwordDialogVisible = ref(false)
 const users = ref([])
 const membershipLevels = ref([])
 
@@ -114,6 +177,13 @@ const form = reactive({
   usernumber: '',
   password: '',
   membership_level: 'free'
+})
+
+const passwordForm = reactive({
+  id: '',
+  usernumber: '',
+  password: '',
+  confirmPassword: ''
 })
 
 const tagTypeMap = {
@@ -159,6 +229,13 @@ const resetForm = () => {
   form.usernumber = ''
   form.password = ''
   form.membership_level = 'free'
+}
+
+const resetPasswordForm = () => {
+  passwordForm.id = ''
+  passwordForm.usernumber = ''
+  passwordForm.password = ''
+  passwordForm.confirmPassword = ''
 }
 
 const handleCreateUser = async () => {
@@ -208,6 +285,72 @@ const updateMembershipLevel = async (row) => {
   } catch (error) {
     row.nextLevel = row.membership_level
     ElMessage.error(error.response?.data?.msg || '账号级别更新失败')
+  }
+}
+
+const canDeleteUser = (row) => {
+  return row.usernumber !== 'admin' && row.id !== userStore.user?.id
+}
+
+const openPasswordDialog = (row) => {
+  resetPasswordForm()
+  passwordForm.id = row.id
+  passwordForm.usernumber = row.usernumber
+  passwordDialogVisible.value = true
+}
+
+const handlePasswordUpdate = async () => {
+  if (!passwordForm.password.trim()) {
+    ElMessage.warning('新密码不能为空')
+    return
+  }
+
+  if (passwordForm.password !== passwordForm.confirmPassword) {
+    ElMessage.warning('两次输入的新密码不一致')
+    return
+  }
+
+  passwordSubmitting.value = true
+  try {
+    const res = await axios.patch(`/api/user/admin/users/${passwordForm.id}/password/`, {
+      password: passwordForm.password
+    }, {
+      withCredentials: true
+    })
+
+    ElMessage.success(res.data.msg || '账号密码修改成功')
+    passwordDialogVisible.value = false
+    resetPasswordForm()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.msg || '账号密码修改失败')
+  } finally {
+    passwordSubmitting.value = false
+  }
+}
+
+const handleDeleteUser = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除账号 ${row.usernumber} 吗？删除后无法恢复。`,
+      '删除确认',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const res = await axios.delete(`/api/user/admin/users/${row.id}/`, {
+      withCredentials: true
+    })
+
+    ElMessage.success(res.data.msg || '账号删除成功')
+    users.value = users.value.filter((item) => item.id !== row.id)
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') {
+      return
+    }
+    ElMessage.error(error.response?.data?.msg || '账号删除失败')
   }
 }
 
@@ -376,6 +519,43 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.row-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.password-dialog {
+  display: grid;
+  gap: 12px;
+}
+
+.password-dialog label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.password-dialog input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid #d8dee8;
+  border-radius: 14px;
+  background: #f8fafc;
+  outline: none;
+}
+
+.dialog-user {
+  margin: 0 0 4px;
+  color: #6b7280;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 @media (max-width: 1100px) {
