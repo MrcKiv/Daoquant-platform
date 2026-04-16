@@ -2,6 +2,8 @@
 
 这是一个已经整理成可直接 Docker 部署的版本库。
 
+如果你要把项目部署到另一台电脑，并提供给局域网中的其他电脑使用，请优先查看 [DOCKER_DEPLOY.md](/D:/Daoquant-platform/DOCKER_DEPLOY.md)。
+
 默认部署链路：
 
 - `frontend`: Vite 打包后由 `nginx` 提供静态页面和反向代理

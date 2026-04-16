@@ -2,6 +2,9 @@
 .vscode
 .pytest_cache
 .env
+.env.*
+!.env.example
+node_modules
 frontend/node_modules
 frontend/dist
 backend_main/ths_trade/venv
@@ -13,3 +16,12 @@ __pycache__
 *.pyd
 Output*.txt
 TestOutput.txt
+backend_main/strategy/策略/extracted_sequences_*.pkl
+backend_main/strategy/策略/clustering_results_*.pkl
+backend_main/strategy/策略/robust_clusters.pkl
+backend_main/strategy/策略/stock_scoring_results_*.csv
+backend_main/strategy/bin_data
+backend_main/backend/bin_data
+backend_main/backend/新稳定上涨策略_*.csv
+backend_main/backend/robust_clusters.pkl
+backend_main/backend/supervised_model.pkl
