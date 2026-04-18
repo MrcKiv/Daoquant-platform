@@ -6,6 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import User_Strategy_Configuration
 from .report_cache import delete_backtest_cache
+from .uploaded_strategy_store import list_uploaded_strategies, save_uploaded_strategy
 import strategy.mysql_connect as sc
 
 
@@ -116,6 +117,49 @@ def get_stock_selector(request):
         return JsonResponse({"success": True, "received_data": data}, status=200)
     except Exception as e:
         print(f"get_stock_selector error: {e}")
+        traceback.print_exc()
+        return JsonResponse({"success": False, "error": str(e)}, status=400)
+
+
+@csrf_exempt
+def list_uploaded_strategy_files(request):
+    if request.method != 'GET':
+        return JsonResponse({"success": False, "error": "Only GET is supported."}, status=405)
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({'success': False, 'message': 'Not logged in.'}, status=401)
+
+    try:
+        return JsonResponse({
+            "success": True,
+            "strategies": list_uploaded_strategies(user_id),
+        }, status=200)
+    except Exception as e:
+        print(f"list_uploaded_strategy_files error: {e}")
+        traceback.print_exc()
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@csrf_exempt
+def upload_strategy_file(request):
+    if request.method != 'POST':
+        return JsonResponse({"success": False, "error": "Only POST is supported."}, status=405)
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        return JsonResponse({'success': False, 'message': 'Not logged in.'}, status=401)
+
+    uploaded_file = request.FILES.get('strategyFile')
+    try:
+        strategy, existed = save_uploaded_strategy(user_id, uploaded_file)
+        return JsonResponse({
+            "success": True,
+            "message": "Strategy file updated." if existed else "Strategy file uploaded.",
+            "strategy": strategy,
+        }, status=200)
+    except Exception as e:
+        print(f"upload_strategy_file error: {e}")
         traceback.print_exc()
         return JsonResponse({"success": False, "error": str(e)}, status=400)
 

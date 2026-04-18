@@ -3,6 +3,7 @@ name: daoquant-platform
 services:
   db:
     image: mysql:8.4
+    pull_policy: never
     restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
@@ -26,9 +27,8 @@ services:
       start_period: 10m
 
   backend:
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
+    image: daoquant-platform-backend:latest
+    pull_policy: never
     restart: unless-stopped
     volumes:
       - strategy_uploads:/app/runtime_uploads
@@ -67,13 +67,8 @@ services:
       retries: 20
 
   frontend:
-    build:
-      context: .
-      dockerfile: docker/frontend/Dockerfile
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
-        VITE_ENABLE_AUTO_TRADE: ${VITE_ENABLE_AUTO_TRADE:-false}
-        VITE_TRADE_API_BASE_URL: ${VITE_TRADE_API_BASE_URL:-/trade-api}
+    image: daoquant-platform-frontend:latest
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       backend:

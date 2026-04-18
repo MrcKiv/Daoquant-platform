@@ -1,8 +1,10 @@
 <template>
   <div class="backtest-trigger">
     <div class="toolbar">
-      <button class="start-backtest-btn" @click="startBacktest">开始回测</button>
-      <button :disabled="isPreparingReport" @click="openPreparedReport">
+      <button class="start-backtest-btn" :disabled="isBacktestRunning" @click="startBacktest">
+        {{ isBacktestRunning ? '回测进行中...' : '开始回测' }}
+      </button>
+      <button :disabled="isPreparingReport || isBacktestRunning" @click="openPreparedReport">
         {{ isPreparingReport ? '报告准备中...' : '导出 PDF 报告' }}
       </button>
     </div>
@@ -26,6 +28,23 @@
         <div ref="chartRef" class="chart-canvas"></div>
       </section>
     </div>
+
+    <section class="log-panel">
+      <div class="log-header">
+        <h3>回测日志</h3>
+        <span :class="['log-status', `is-${backtestLogStatus}`]">{{ backtestLogStatusLabel }}</span>
+      </div>
+      <div ref="logContainerRef" class="log-console">
+        <template v-if="backtestLogLines.length">
+          <div v-for="(line, index) in backtestLogLines" :key="`${index}-${line}`" class="log-line">
+            {{ line }}
+          </div>
+        </template>
+        <div v-else class="log-placeholder">
+          点击“开始回测”后，这里会实时显示回测进度和日志输出。
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -55,6 +74,7 @@ const props = defineProps({
 })
 
 const chartRef = ref(null)
+const logContainerRef = ref(null)
 const chartError = ref('')
 const strategyConfig = ref({})
 const factorConfig = ref([])
@@ -63,8 +83,14 @@ const backtestResultData = ref({})
 const backtestConfigResult = ref({})
 const requestData = ref({ incomeBase: '沪深300' })
 const isPreparingReport = ref(false)
+const isBacktestRunning = ref(false)
+const backtestLogLines = ref([])
+const backtestLogStatus = ref('idle')
+const backtestLogSince = ref(0)
 
 let chartInstance = null
+let logPollTimer = null
+let activeLogRunId = ''
 
 const REPORT_DATA_KEYS = [
   'daily_returns',
@@ -177,6 +203,19 @@ const chartData = computed(() => {
   return backtestConfigResult.value
 })
 
+const backtestLogStatusLabel = computed(() => {
+  switch (backtestLogStatus.value) {
+    case 'running':
+      return '回测中'
+    case 'completed':
+      return '已完成'
+    case 'failed':
+      return '已失败'
+    default:
+      return '未开始'
+  }
+})
+
 const summaryData = computed(() => {
   const s = currentStrategy.value || {}
   const factorStr = (currentFactor.value || [])
@@ -204,6 +243,90 @@ const shareholdingMap = computed(() => chartData.value?.ShareHolding_stock || {}
 const resizeChart = () => {
   if (chartInstance) {
     chartInstance.resize()
+  }
+}
+
+const createLogRunId = () => `${currentStrategy.value?.strategyName || strategyName || 'strategy'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+const scrollLogToBottom = async () => {
+  await nextTick()
+  if (logContainerRef.value) {
+    logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight
+  }
+}
+
+const appendBacktestLogs = async lines => {
+  if (!Array.isArray(lines) || lines.length === 0) return
+  backtestLogLines.value = [...backtestLogLines.value, ...lines].slice(-600)
+  await scrollLogToBottom()
+}
+
+const fetchBacktestLogs = async runId => {
+  if (!runId) return
+
+  try {
+    const res = await axios.get('/api/strategy/getBacktestLog/', {
+      params: {
+        runId,
+        since: backtestLogSince.value,
+      },
+      withCredentials: true,
+    })
+
+    if (activeLogRunId !== runId) return
+
+    backtestLogSince.value = Number(res.data?.next_since || backtestLogSince.value)
+    backtestLogStatus.value = res.data?.status || backtestLogStatus.value
+    await appendBacktestLogs(res.data?.lines || [])
+    if (res.data?.error && backtestLogStatus.value === 'failed') {
+      chartError.value = chartError.value || res.data.error
+    }
+  } catch (error) {
+    if (activeLogRunId !== runId) return
+    if (error.response?.status !== 404) {
+      console.error('fetchBacktestLogs error:', error)
+    }
+  }
+}
+
+const startLogPolling = runId => {
+  if (logPollTimer) {
+    clearTimeout(logPollTimer)
+    logPollTimer = null
+  }
+
+  activeLogRunId = runId
+  isBacktestRunning.value = true
+  backtestLogStatus.value = 'running'
+  backtestLogLines.value = []
+  backtestLogSince.value = 0
+
+  const poll = async () => {
+    if (!isBacktestRunning.value || activeLogRunId !== runId) return
+    await fetchBacktestLogs(runId)
+    if (!isBacktestRunning.value || activeLogRunId !== runId) return
+    logPollTimer = window.setTimeout(poll, 1200)
+  }
+
+  poll()
+}
+
+const finishLogPolling = async (runId, failed = false) => {
+  if (logPollTimer) {
+    clearTimeout(logPollTimer)
+    logPollTimer = null
+  }
+
+  isBacktestRunning.value = false
+  await fetchBacktestLogs(runId)
+
+  if (activeLogRunId === runId) {
+    if (failed && backtestLogStatus.value === 'running') {
+      backtestLogStatus.value = 'failed'
+    } else if (!failed && backtestLogStatus.value === 'running') {
+      backtestLogStatus.value = 'completed'
+    }
+    activeLogRunId = ''
   }
 }
 
@@ -356,6 +479,7 @@ const sendAutoTradeData = async (trades, strategyNo) => {
 }
 
 const startBacktest = async () => {
+  let logRunId = ''
   try {
     if (!currentStrategy.value?.strategyName) {
       ElMessage.error('请先选择策略')
@@ -383,9 +507,15 @@ const startBacktest = async () => {
           factors: currentFactor.value || [],
         },
       },
+      log_run_id: createLogRunId(),
     }
 
-    const response = await axios.post('/api/strategy/getBackTrigger/', payload)
+    logRunId = payload.log_run_id
+    startLogPolling(logRunId)
+
+    const response = await axios.post('/api/strategy/getBackTrigger/', payload, { withCredentials: true })
+    await finishLogPolling(logRunId, false)
+
     const immediateResult = normalizeBacktestResult(extractBacktestResult(response.data))
     const latestResult = await loadStrategySummary()
     let hasChartData = hasBacktestPayload(latestResult)
@@ -406,6 +536,9 @@ const startBacktest = async () => {
       await sendAutoTradeData(activeResult.trades || {}, currentStrategy.value.strategyName || strategyName)
     }
   } catch (error) {
+    if (logRunId) {
+      await finishLogPolling(logRunId, true)
+    }
     console.error('startBacktest error:', error)
     chartError.value = chartError.value || error.response?.data?.error || error.message || '回测结果加载失败'
     ElMessage.error(error.response?.data?.message || error.message || '获取回测数据失败')
@@ -489,6 +622,10 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', resizeChart)
+  if (logPollTimer) {
+    clearTimeout(logPollTimer)
+    logPollTimer = null
+  }
   if (chartInstance) {
     chartInstance.dispose()
     chartInstance = null
@@ -527,10 +664,12 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 360px 1fr;
   gap: 16px;
+  margin-bottom: 16px;
 }
 
 .summary-panel,
-.chart-panel {
+.chart-panel,
+.log-panel {
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -538,7 +677,8 @@ onUnmounted(() => {
 }
 
 .summary-panel h3,
-.chart-panel h3 {
+.chart-panel h3,
+.log-panel h3 {
   margin: 0 0 16px;
 }
 
@@ -570,6 +710,61 @@ onUnmounted(() => {
   border-radius: 8px;
   background: #fef2f2;
   color: #b91c1c;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.log-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e5e7eb;
+  color: #475569;
+}
+
+.log-status.is-running {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.log-status.is-completed {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.log-status.is-failed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.log-console {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-placeholder {
+  color: #94a3b8;
 }
 
 @media (max-width: 960px) {

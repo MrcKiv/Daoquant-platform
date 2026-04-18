@@ -739,19 +739,36 @@ def buy_stock(stocklist, candidate_stock, max_stock_num, remained_money, current
                 print('无当天数据', candidate_stock['st_code'][i], current_day)
                 continue
 
-            if 100 * data['close'][0] >= max_cost or 100 * data['close'][0] >= remained_money or (
-                    data['close'][0] - data['pre_close'][0]) / data['pre_close'][0] > 0.11:
+            close_price = pd.to_numeric(pd.Series([data.loc[0, 'close']]), errors='coerce').iloc[0]
+            pre_close_price = pd.to_numeric(pd.Series([data.loc[0, 'pre_close']]), errors='coerce').iloc[0]
+
+            if pd.isna(close_price) or close_price <= 0:
+                num = num - 1
+                print(f"跳过买入 {candidate_stock['st_code'][i]}: close 无效 -> {data.loc[0, 'close']}")
+                continue
+
+            if pd.isna(pre_close_price) or pre_close_price <= 0:
+                num = num - 1
+                print(f"跳过买入 {candidate_stock['st_code'][i]}: pre_close 无效 -> {data.loc[0, 'pre_close']}")
+                continue
+
+            if 100 * close_price >= max_cost or 100 * close_price >= remained_money or (
+                    close_price - pre_close_price) / pre_close_price > 0.11:
                 num = num - 1
                 continue
             else:
-                share = int(max_cost / (100 * data['close'][0]))  # 买入的多少手
+                share = int(max_cost / (100 * close_price))  # 买入的多少手
+                if share <= 0:
+                    num = num - 1
+                    print(f"跳过买入 {candidate_stock['st_code'][i]}: 可买手数不足, close={close_price}, max_cost={max_cost}")
+                    continue
                 buystocklist.loc[0, 'st_code'] = candidate_stock['st_code'][i]
                 buystocklist.loc[0, 'trade_date'] = current_day
-                buystocklist.loc[0, 'turnover'] = float(share * 100 * data['close'][0])  # turnover成交额
+                buystocklist.loc[0, 'turnover'] = float(share * 100 * close_price)  # turnover成交额
                 # 表示买入的交易量（单位：股）
                 buystocklist.loc[0, 'number_of_transactions'] = share * 100
-                buystocklist.loc[0, 'trade_price'] = float(data['close'][0])
-                remained_money = remained_money - share * 100 * data['close'][0]
+                buystocklist.loc[0, 'trade_price'] = float(close_price)
+                remained_money = remained_money - share * 100 * close_price
                 # round(number,digits)digits>0，四舍五入到指定的小数位
                 remained_money = round(remained_money, 2)
                 buystocklist.loc[0, 'trade_type'] = '买入'

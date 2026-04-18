@@ -1,6 +1,12 @@
 import gc
+import hashlib
+import os
 import random
+import sys
+import tempfile
+import threading
 from decimal import Decimal
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 
 import requests
 import numpy as np
@@ -40,6 +46,7 @@ from .策略.Stock_RL import main as stock_rl_main
 from .models import Current_shareholding_information, Historical_transaction_information, \
     Daily_statistics, Baseline_Profit_Loss, User_Strategy_Configuration, Strategy, SaveState
 from .report_cache import load_backtest_cache, save_backtest_cache
+from .uploaded_strategy_store import load_uploaded_strategy_callable
 import strategy.mysql_connect as sc
 from scipy.signal import find_peaks
 from django.contrib.sessions.models import Session
@@ -68,6 +75,247 @@ STRATEGY_MAIN_MAP = {
     '深度学习RL策略': stock_rl_main,
     # 可以继续添加其他策略
 }
+
+
+def resolve_strategy_selection(selector_data, user_id):
+    selected_strategy = selector_data[0] if isinstance(selector_data, list) and selector_data else {}
+    strategy_type = selected_strategy.get('operator', 'default')
+    strategy_source = selected_strategy.get('strategySource')
+    custom_strategy_id = selected_strategy.get('customStrategyId') or selected_strategy.get('custom_strategy_id')
+
+    if strategy_source == 'uploaded' or selected_strategy.get('factor') == '自定义策略' or custom_strategy_id:
+        if not user_id:
+            raise ValueError('未登录，无法加载上传策略')
+        if not custom_strategy_id:
+            raise ValueError('自定义策略缺少 customStrategyId')
+
+        metadata, strategy_main = load_uploaded_strategy_callable(user_id, custom_strategy_id)
+        return metadata.get('name') or strategy_type or custom_strategy_id, strategy_main
+
+    return strategy_type, STRATEGY_MAIN_MAP.get(strategy_type, STRATEGY_MAIN_MAP['default'])
+
+BACKTEST_LOG_LOCK = threading.Lock()
+BACKTEST_LOG_TTL_SECONDS = 60 * 60
+BACKTEST_LOG_DIR = os.path.join(tempfile.gettempdir(), 'daoquant_backtest_logs')
+
+
+class BacktestLogTee:
+    def __init__(self, run_id, original_stream):
+        self.run_id = run_id
+        self.original_stream = original_stream
+        self._buffer = ''
+        self.encoding = getattr(original_stream, 'encoding', 'utf-8')
+
+    def write(self, text):
+        if self.original_stream:
+            self.original_stream.write(text)
+
+        if not self.run_id or text is None:
+            return 0
+
+        self._buffer += str(text)
+        while '\n' in self._buffer:
+            line, self._buffer = self._buffer.split('\n', 1)
+            _append_backtest_log_line(self.run_id, line.rstrip('\r'))
+        return len(text)
+
+    def flush(self):
+        if self.original_stream:
+            self.original_stream.flush()
+        if self.run_id and self._buffer.strip():
+            _append_backtest_log_line(self.run_id, self._buffer.rstrip('\r'))
+        self._buffer = ''
+
+
+def _ensure_backtest_log_dir():
+    os.makedirs(BACKTEST_LOG_DIR, exist_ok=True)
+
+
+def _get_backtest_log_paths(run_id):
+    run_hash = hashlib.md5(str(run_id).encode('utf-8')).hexdigest()
+    base_path = os.path.join(BACKTEST_LOG_DIR, run_hash)
+    return {
+        'meta': f'{base_path}.json',
+        'lines': f'{base_path}.log',
+    }
+
+
+def _read_backtest_log_state(run_id):
+    paths = _get_backtest_log_paths(run_id)
+    if not os.path.exists(paths['meta']):
+        return None
+
+    try:
+        with open(paths['meta'], 'r', encoding='utf-8') as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+
+def _write_backtest_log_state(run_id, payload):
+    _ensure_backtest_log_dir()
+    paths = _get_backtest_log_paths(run_id)
+    temp_path = f"{paths['meta']}.tmp"
+    with open(temp_path, 'w', encoding='utf-8') as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+    os.replace(temp_path, paths['meta'])
+
+
+def _read_backtest_log_lines(run_id):
+    paths = _get_backtest_log_paths(run_id)
+    if not os.path.exists(paths['lines']):
+        return []
+
+    try:
+        with open(paths['lines'], 'r', encoding='utf-8') as fh:
+            return [line.rstrip('\r\n') for line in fh.readlines() if line.strip()]
+    except Exception:
+        return []
+
+
+def _cleanup_backtest_log_runs():
+    _ensure_backtest_log_dir()
+    now = time.time()
+
+    with BACKTEST_LOG_LOCK:
+        for file_name in os.listdir(BACKTEST_LOG_DIR):
+            if not file_name.endswith('.json'):
+                continue
+
+            meta_path = os.path.join(BACKTEST_LOG_DIR, file_name)
+            try:
+                with open(meta_path, 'r', encoding='utf-8') as fh:
+                    payload = json.load(fh)
+            except Exception:
+                payload = None
+
+            if payload and payload.get('status') == 'running':
+                continue
+
+            updated_at = (payload or {}).get('updated_at', 0)
+            if now - updated_at <= BACKTEST_LOG_TTL_SECONDS:
+                continue
+
+            log_path = meta_path[:-5] + '.log'
+            for path in (meta_path, log_path):
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except OSError:
+                    pass
+
+
+def _create_backtest_log_run(run_id, user_id, strategy_name):
+    if not run_id:
+        return
+
+    _cleanup_backtest_log_runs()
+    now = time.time()
+    with BACKTEST_LOG_LOCK:
+        _write_backtest_log_state(run_id, {
+            'user_id': '' if user_id is None else str(user_id),
+            'strategy_name': strategy_name or '',
+            'status': 'running',
+            'error': '',
+            'started_at': now,
+            'updated_at': now,
+        })
+        paths = _get_backtest_log_paths(run_id)
+        with open(paths['lines'], 'w', encoding='utf-8') as fh:
+            fh.write('')
+
+    _append_backtest_log_line(run_id, f"回测任务已启动：{strategy_name or '未命名策略'}")
+
+
+def _append_backtest_log_line(run_id, line):
+    if not run_id:
+        return
+
+    line = str(line).strip()
+    if not line:
+        return
+
+    formatted_line = f"[{datetime.now().strftime('%H:%M:%S')}] {line}"
+    with BACKTEST_LOG_LOCK:
+        payload = _read_backtest_log_state(run_id)
+        if not payload:
+            return
+
+        payload['updated_at'] = time.time()
+        _write_backtest_log_state(run_id, payload)
+
+        paths = _get_backtest_log_paths(run_id)
+        with open(paths['lines'], 'a', encoding='utf-8') as fh:
+            fh.write(f'{formatted_line}\n')
+
+
+def _set_backtest_log_status(run_id, status, error=''):
+    if not run_id:
+        return
+
+    with BACKTEST_LOG_LOCK:
+        payload = _read_backtest_log_state(run_id)
+        if not payload:
+            return
+
+        payload['status'] = status
+        payload['updated_at'] = time.time()
+        if error:
+            payload['error'] = error
+        _write_backtest_log_state(run_id, payload)
+
+
+def _extract_backtest_log_error(response):
+    try:
+        payload = json.loads(response.content.decode('utf-8'))
+    except Exception:
+        return ''
+
+    return payload.get('error') or payload.get('message') or ''
+
+
+@csrf_exempt
+def getBacktestLog(request):
+    if request.method != 'GET':
+        return JsonResponse({"success": False, "error": "只支持 GET 请求"}, status=405)
+
+    run_id = request.GET.get('runId') or request.GET.get('run_id')
+    if not run_id:
+        return JsonResponse({"success": False, "error": "缺少 runId"}, status=400)
+
+    try:
+        since = int(request.GET.get('since', 0))
+    except (TypeError, ValueError):
+        since = 0
+
+    current_user_id = request.session.get('user_id')
+
+    with BACKTEST_LOG_LOCK:
+        payload = _read_backtest_log_state(run_id)
+        if not payload:
+            return JsonResponse({"success": False, "error": "未找到回测日志"}, status=404)
+
+        owner_user_id = payload.get('user_id', '')
+        if owner_user_id and str(current_user_id or '') != owner_user_id:
+            return JsonResponse({"success": False, "error": "无权查看该回测日志"}, status=403)
+
+        all_lines = _read_backtest_log_lines(run_id)
+        effective_since = max(since, 0)
+        lines = all_lines[effective_since:]
+        next_since = len(all_lines)
+
+        response_payload = {
+            "success": True,
+            "runId": run_id,
+            "status": payload.get('status', 'idle'),
+            "strategyName": payload.get('strategy_name', ''),
+            "lines": lines,
+            "next_since": next_since,
+            "truncated": False,
+            "error": payload.get('error', ''),
+        }
+
+    return JsonResponse(response_payload, status=200)
 
 
 def csrf_token_view(request):
@@ -1015,246 +1263,257 @@ def clear_backtest_memory():
 @csrf_exempt
 def getBackTrigger(request):
     if request.method == 'POST':
+        log_run_id = ''
         try:
-            clear_backtest_memory()
-            gc.collect()
-            # 1️⃣ 接收前端发来的完整参数
             raw_data = request.body.decode('utf-8')
             data = json.loads(raw_data)
+            log_run_id = str(data.get('log_run_id') or data.get('logRunId') or '').strip()
 
-            # 2️⃣ 提取各模块数据
             strategy_params = data.get('strategy', {})
             factor_data = data.get('factor', {}).get('received_data', {}).get('factors', [])
             selector_data = data.get('selector', {}).get('received_data', {}).get('conditions', [])
 
-
             strategy_name = strategy_params.get('strategyName')
-            # 解析基础参数
-            uid = request.session.get('user_id', '')
-            from .safe_views import get_latest_strategy_config
-            config = get_latest_strategy_config(uid, strategy_name)
+            request_user_id = request.session.get('user_id', '')
+            if log_run_id:
+                _create_backtest_log_run(log_run_id, request_user_id, strategy_name)
 
-            sid = 0 # Default SID to prevent UnboundLocalError
-            if config:
-                sid = config.id  # 获取策略配置的ID
-            else:
-                print(f"Warning: Strategy configuration not found for user {uid}, name {strategy_name}. Using default SID=0.")
-            
-            # Ensure uid is a string (UUID support)
-            if not uid:
-                uid = '0' # Default to string '0' if missing
-            else:
-                uid = str(uid)
+            stdout_context = redirect_stdout(BacktestLogTee(log_run_id, sys.stdout)) if log_run_id else nullcontext()
+            stderr_context = redirect_stderr(BacktestLogTee(log_run_id, sys.stderr)) if log_run_id else nullcontext()
 
+            with stdout_context, stderr_context:
+                clear_backtest_memory()
+                gc.collect()
+                response = None
 
+                uid = request_user_id
+                from .safe_views import get_latest_strategy_config
+                config = get_latest_strategy_config(uid, strategy_name)
 
-            init_fund = strategy_params.get('capital')  # 初始资金
-            Investment_ratio = strategy_params.get('ratio')  # 投资比例
-            # incomeBase = strategy_params.get('incomeBase')
-            hold_stock_num = strategy_params.get('hold')  # 持仓股票数
-            start_time = strategy_params.get('start_date')# 开始时间
-            end_time = strategy_params.get('end_date')# 结束时间
+                sid = 0  # Default SID to prevent UnboundLocalError
+                if config:
+                    sid = config.id
+                else:
+                    print(f"Warning: Strategy configuration not found for user {uid}, name {strategy_name}. Using default SID=0.")
 
+                if not uid:
+                    uid = '0'
+                else:
+                    uid = str(uid)
 
+                init_fund = strategy_params.get('capital')
+                Investment_ratio = strategy_params.get('ratio')
+                hold_stock_num = strategy_params.get('hold')
+                start_time = strategy_params.get('start_date')
+                end_time = strategy_params.get('end_date')
 
-            # 转换资金、时间等基础参数
-            Init_fund = float(init_fund) * 10000 if init_fund else 1000000.0
-            Investment_ratio = float(Investment_ratio) if Investment_ratio else 1.0
-            Hold_stock_num = int(hold_stock_num) if hold_stock_num else 10
-            Start_time = datetime.strptime(start_time, '%Y-%m-%d').strftime('%Y%m%d')
-            End_time = datetime.strptime(end_time, '%Y-%m-%d').strftime('%Y%m%d')
+                Init_fund = float(init_fund) * 10000 if init_fund else 1000000.0
+                Investment_ratio = float(Investment_ratio) if Investment_ratio else 1.0
+                Hold_stock_num = int(hold_stock_num) if hold_stock_num else 10
+                Start_time = datetime.strptime(start_time, '%Y-%m-%d').strftime('%Y%m%d')
+                End_time = datetime.strptime(end_time, '%Y-%m-%d').strftime('%Y%m%d')
 
-            Botfacname = {item["name"]: str(item["value"]) for item in factor_data}
-            print('Botfacname',Botfacname)
-            Optionfacname = {item["factor"  ]: str(item["operator"]) for item in selector_data}
-            print('Optionfacname',Optionfacname)
+                Botfacname = {item["name"]: str(item["value"]) for item in factor_data}
+                print('Botfacname', Botfacname)
+                Optionfacname = {item["factor"]: str(item["operator"]) for item in selector_data}
+                print('Optionfacname', Optionfacname)
 
-            # 根据选股条件中的operator选择策略
-            strategy_type = 'default'
-            if selector_data and len(selector_data) > 0:
-                strategy_type = selector_data[0].get('operator', 'default')
+                strategy_type, strategy_main = resolve_strategy_selection(selector_data, uid)
                 print('strategy_type', strategy_type)
+                print(f"使用的策略函数: {getattr(strategy_main, '__name__', strategy_type)}")
+                print("开始执行主函数")
 
-            # 获取对应的策略函数
-            strategy_main = STRATEGY_MAIN_MAP.get(strategy_type, STRATEGY_MAIN_MAP['default'])
-            print(f"使用的策略函数: {strategy_main.__name__}")
-            # 调用策略函数
-            print("开始执行主函数")
+                try:
+                    for table_name in (
+                        sc.table_shareholding,
+                        sc.table_transaction,
+                        sc.table_statistic,
+                        sc.table_baseline,
+                    ):
+                        sc.execute_sql(
+                            f"DELETE FROM {table_name} WHERE strategy_id=%s AND user_id=%s",
+                            (sid, uid),
+                        )
 
-            try:
-                for table_name in (
-                    sc.table_shareholding,
-                    sc.table_transaction,
-                    sc.table_statistic,
-                    sc.table_baseline,
-                ):
-                    sc.execute_sql(
-                        f"DELETE FROM {table_name} WHERE strategy_id=%s AND user_id=%s",
-                        (sid, uid),
+                    strategy_main(
+                        Init_fund,
+                        Investment_ratio,
+                        Hold_stock_num,
+                        Start_time,
+                        End_time,
+                        Optionfacname,
+                        Botfacname,
+                        sid,
+                        uid
+                    )
+                except Exception as e:
+                    print("❌ strategy_main 执行失败:", e)
+                    import traceback
+                    traceback.print_exc()
+                    error_msg = f"strategy_main error: {str(e)}\n{traceback.format_exc()}"
+                    response = JsonResponse(
+                        {"success": False, "error": error_msg},
+                        status=500
                     )
 
-                strategy_main(
-                    Init_fund,
-                    Investment_ratio,
-                    Hold_stock_num,
-                    Start_time,
-                    End_time,
-                    Optionfacname,
-                    Botfacname,
-                    sid,
-                    uid
-                )
-            except Exception as e:
-                print("❌ strategy_main 执行失败:", e)
-                import traceback
-                traceback.print_exc()
-                error_msg = f"strategy_main error: {str(e)}\n{traceback.format_exc()}"
-                return JsonResponse(
-                    {"success": False, "error": error_msg},
-                    status=500
-                )
+                if response is None:
+                    try:
+                        from .views_多图 import (
+                            fetch_backtest_data as fetch_backtest_data_full,
+                            fetch_all_backtest_data as fetch_all_backtest_data_full,
+                            calculate_period_returns as calculate_period_returns_full,
+                            calculate_annual_returns as calculate_annual_returns_full,
+                            calculate_stock_performance_attribution as calculate_stock_performance_attribution_full,
+                            calculate_stock_performance_attribution_loss as calculate_stock_performance_attribution_loss_full,
+                            calculate_industry_allocation_timeline as calculate_industry_allocation_timeline_full,
+                            calculate_holdings_timeline as calculate_holdings_timeline_full,
+                            calculate_industry_holdings_analysis as calculate_industry_holdings_analysis_full,
+                            calculate_end_period_market_value_proportion as calculate_end_period_market_value_proportion_full,
+                            calculate_transaction_type_analysis as calculate_transaction_type_analysis_full,
+                            calculate_transaction_type_analysis_sell as calculate_transaction_type_analysis_sell_full,
+                        )
 
+                        ShareHolding_data, Historical_transaction_data, incomeBase_data, incomeBaseline, stock_performance_data_range, industry_data, stock_basic_data = fetch_backtest_data_full(
+                            sid, uid, Start_time, End_time
+                        )
+                        _, _, incomeBase_data_all, incomeBaseline_all, stock_performance_data_all, _, _, market_index_data_all = fetch_all_backtest_data_full(
+                            sid, uid
+                        )
+                    except Exception as e:
+                        response = JsonResponse({"success": False, "error": f"数据库查询失败: {str(e)}"}, status=500)
 
-            try:
-                from .views_多图 import (
-                    fetch_backtest_data as fetch_backtest_data_full,
-                    fetch_all_backtest_data as fetch_all_backtest_data_full,
-                    calculate_period_returns as calculate_period_returns_full,
-                    calculate_annual_returns as calculate_annual_returns_full,
-                    calculate_stock_performance_attribution as calculate_stock_performance_attribution_full,
-                    calculate_stock_performance_attribution_loss as calculate_stock_performance_attribution_loss_full,
-                    calculate_industry_allocation_timeline as calculate_industry_allocation_timeline_full,
-                    calculate_holdings_timeline as calculate_holdings_timeline_full,
-                    calculate_industry_holdings_analysis as calculate_industry_holdings_analysis_full,
-                    calculate_end_period_market_value_proportion as calculate_end_period_market_value_proportion_full,
-                    calculate_transaction_type_analysis as calculate_transaction_type_analysis_full,
-                    calculate_transaction_type_analysis_sell as calculate_transaction_type_analysis_sell_full,
-                )
+                if response is None:
+                    trade_date = [item['trade_date'] for item in incomeBase_data]
+                    share_dict = defaultdict(list)
+                    for item in ShareHolding_data:
+                        share_dict[item['trade_date']].append(item['st_code'])
 
-                ShareHolding_data, Historical_transaction_data, incomeBase_data, incomeBaseline, stock_performance_data_range, industry_data, stock_basic_data = fetch_backtest_data_full(
-                    sid, uid, Start_time, End_time
-                )
-                _, _, incomeBase_data_all, incomeBaseline_all, stock_performance_data_all, _, _, market_index_data_all = fetch_all_backtest_data_full(
-                    sid, uid
-                )
-            except Exception as e:
-                return JsonResponse({"success": False, "error": f"数据库查询失败: {str(e)}"}, status=500)
+                    his_dict = defaultdict(list)
+                    for item in Historical_transaction_data:
+                        his_dict[item['trade_date']].append({
+                            'st_code': item['st_code'],
+                            'trade_type': item.get('trade_type', None),
+                            'trade_price': item.get('trade_price', None),
+                            'number_of_transactions': item.get('number_of_transactions', None),
+                            'turnover': item.get('turnover', None)
+                        })
 
-            trade_date = [item['trade_date'] for item in incomeBase_data]
-            share_dict = defaultdict(list)
-            for item in ShareHolding_data:
-                share_dict[item['trade_date']].append(item['st_code'])
+                    calculate_stock_profit_loss_data = calculate_stock_profit_loss(Historical_transaction_data)
+                    daily_returns = calculate_daily_returns(incomeBase_data, incomeBaseline)
+                    period_returns = calculate_period_returns_full(
+                        incomeBase_data,
+                        incomeBaseline,
+                        incomeBase_data_all,
+                        incomeBaseline_all,
+                        Start_time,
+                        End_time,
+                    )
+                    annual_returns = calculate_annual_returns_full(incomeBase_data_all, incomeBaseline_all)
+                    stock_performance_attribution = calculate_stock_performance_attribution_full(stock_performance_data_all)
+                    stock_performance_attribution_range = calculate_stock_performance_attribution_full(stock_performance_data_range)
+                    stock_performance_attribution_loss_range = calculate_stock_performance_attribution_loss_full(stock_performance_data_range)
+                    industry_allocation_timeline = calculate_industry_allocation_timeline_full(ShareHolding_data, industry_data)
+                    holdings_timeline = calculate_holdings_timeline_full(ShareHolding_data, stock_basic_data)
+                    industry_holdings_analysis = calculate_industry_holdings_analysis_full(ShareHolding_data, industry_data)
+                    end_period_market_value_proportion = calculate_end_period_market_value_proportion_full(ShareHolding_data, industry_data)
+                    transaction_type_analysis = calculate_transaction_type_analysis_full(Historical_transaction_data, market_index_data_all)
+                    transaction_type_analysis_sell = calculate_transaction_type_analysis_sell_full(Historical_transaction_data, market_index_data_all)
 
-            his_dict = defaultdict(list)
-            for item in Historical_transaction_data:
-                his_dict[item['trade_date']].append({
-                    'st_code': item['st_code'],
-                    'trade_type': item.get('trade_type', None),
-                    'trade_price': item.get('trade_price', None),
-                    'number_of_transactions': item.get('number_of_transactions', None),
-                    'turnover': item.get('turnover', None)
-                })
+                    back_return = [item['profit_and_loss_ratio'] for item in incomeBase_data]
+                    stock_assets = [item['assets'] for item in incomeBase_data]
 
-            calculate_stock_profit_loss_data = calculate_stock_profit_loss(Historical_transaction_data)
-            daily_returns = calculate_daily_returns(incomeBase_data, incomeBaseline)
-            period_returns = calculate_period_returns_full(
-                incomeBase_data,
-                incomeBaseline,
-                incomeBase_data_all,
-                incomeBaseline_all,
-                Start_time,
-                End_time,
-            )
-            annual_returns = calculate_annual_returns_full(incomeBase_data_all, incomeBaseline_all)
-            stock_performance_attribution = calculate_stock_performance_attribution_full(stock_performance_data_all)
-            stock_performance_attribution_range = calculate_stock_performance_attribution_full(stock_performance_data_range)
-            stock_performance_attribution_loss_range = calculate_stock_performance_attribution_loss_full(stock_performance_data_range)
-            industry_allocation_timeline = calculate_industry_allocation_timeline_full(ShareHolding_data, industry_data)
-            holdings_timeline = calculate_holdings_timeline_full(ShareHolding_data, stock_basic_data)
-            industry_holdings_analysis = calculate_industry_holdings_analysis_full(ShareHolding_data, industry_data)
-            end_period_market_value_proportion = calculate_end_period_market_value_proportion_full(ShareHolding_data, industry_data)
-            transaction_type_analysis = calculate_transaction_type_analysis_full(Historical_transaction_data, market_index_data_all)
-            transaction_type_analysis_sell = calculate_transaction_type_analysis_sell_full(Historical_transaction_data, market_index_data_all)
+                    baseline_dict = {item['trade_date']: item for item in incomeBaseline}
+                    incomeBase_close = []
+                    baseline_assets = []
+                    last_ratio = 0.0
+                    last_asset = stock_assets[0] if len(stock_assets) > 0 else 0.0
+                    for day in trade_date:
+                        if day in baseline_dict:
+                            last_ratio = float(baseline_dict[day]['profit_and_loss_ratio'])
+                            last_asset = float(baseline_dict[day]['assets'])
+                        incomeBase_close.append(last_ratio)
+                        baseline_assets.append(last_asset)
 
-            back_return = [item['profit_and_loss_ratio'] for item in incomeBase_data]
-            stock_assets = [item['assets'] for item in incomeBase_data]
+                    risk_free_rate = 1.75 / 100
+                    trading_days_per_year = 250
+                    if len(stock_assets) > 1 and len(baseline_assets) > 1:
+                        transaction_data = pd.DataFrame(Historical_transaction_data)
+                        stock_max_back = maxback(np.array(stock_assets))
+                        stock_sharpe_ratio = sharpe_ratio(np.array(stock_assets), risk_free_rate, trading_days_per_year)
+                        stock_sortino_ratio = sortino_ratio(np.array(stock_assets), risk_free_rate, trading_days_per_year)
+                        stock_annualized_return = annualized_return(np.array(stock_assets), trading_days_per_year)
+                        stock_win_rate = win_rate(transaction_data)
+                        baseline_max_back = maxback(np.array(incomeBase_close))
+                        baseline_sharpe_ratio = sharpe_ratio(np.array(baseline_assets), risk_free_rate, trading_days_per_year)
+                        baseline_annualized_return = incomeBase_close[-1] / len(incomeBase_close) * trading_days_per_year if len(incomeBase_close) > 0 else 0.0
+                    else:
+                        stock_max_back = 0.0
+                        stock_sharpe_ratio = 0.0
+                        stock_sortino_ratio = 0.0
+                        stock_annualized_return = 0.0
+                        stock_win_rate = 0.0
+                        baseline_max_back = 0.0
+                        baseline_sharpe_ratio = 0.0
+                        baseline_annualized_return = 0.0
 
-            baseline_dict = {item['trade_date']: item for item in incomeBaseline}
-            incomeBase_close = []
-            baseline_assets = []
-            last_ratio = 0.0
-            last_asset = stock_assets[0] if len(stock_assets) > 0 else 0.0
-            for day in trade_date:
-                if day in baseline_dict:
-                    last_ratio = float(baseline_dict[day]['profit_and_loss_ratio'])
-                    last_asset = float(baseline_dict[day]['assets'])
-                incomeBase_close.append(last_ratio)
-                baseline_assets.append(last_asset)
-
-            risk_free_rate = 1.75 / 100
-            trading_days_per_year = 250
-            if len(stock_assets) > 1 and len(baseline_assets) > 1:
-                transaction_data = pd.DataFrame(Historical_transaction_data)
-                stock_max_back = maxback(np.array(stock_assets))
-                stock_sharpe_ratio = sharpe_ratio(np.array(stock_assets), risk_free_rate, trading_days_per_year)
-                stock_sortino_ratio = sortino_ratio(np.array(stock_assets), risk_free_rate, trading_days_per_year)
-                stock_annualized_return = annualized_return(np.array(stock_assets), trading_days_per_year)
-                stock_win_rate = win_rate(transaction_data)
-                baseline_max_back = maxback(np.array(incomeBase_close))
-                baseline_sharpe_ratio = sharpe_ratio(np.array(baseline_assets), risk_free_rate, trading_days_per_year)
-                baseline_annualized_return = incomeBase_close[-1] / len(incomeBase_close) * trading_days_per_year if len(incomeBase_close) > 0 else 0.0
-            else:
-                stock_max_back = 0.0
-                stock_sharpe_ratio = 0.0
-                stock_sortino_ratio = 0.0
-                stock_annualized_return = 0.0
-                stock_win_rate = 0.0
-                baseline_max_back = 0.0
-                baseline_sharpe_ratio = 0.0
-                baseline_annualized_return = 0.0
-
-            result = {
-                'benchmarkReturns': incomeBase_close,
-                'dates': trade_date,
-                'strategyReturns': back_return,
-                'ShareHolding_stock': dict(share_dict),
-                'trades': dict(his_dict),
-                'calculate_stock_profit_loss': calculate_stock_profit_loss_data,
-                'daily_returns': daily_returns,
-                'period_returns': period_returns,
-                'annual_returns': annual_returns,
-                'stock_performance_attribution': stock_performance_attribution,
-                'stock_performance_attribution_range': stock_performance_attribution_range,
-                'stock_performance_attribution_loss_range': stock_performance_attribution_loss_range,
-                'industry_allocation_timeline': industry_allocation_timeline,
-                'holdings_timeline': holdings_timeline,
-                'industry_holdings_analysis': industry_holdings_analysis,
-                'end_period_market_value_proportion': end_period_market_value_proportion,
-                'transaction_type_analysis': transaction_type_analysis,
-                'transaction_type_analysis_sell': transaction_type_analysis_sell,
-                'metrics': {
-                    'strategy': {
-                        'maxDrawdown': stock_max_back,
-                        'sharpeRatio': stock_sharpe_ratio,
-                        'annualizedReturn': stock_annualized_return,
-                        'winRate': stock_win_rate,
-                        'sortinoRatio': stock_sortino_ratio,
-                    },
-                    'benchmark': {
-                        'maxDrawdown': baseline_max_back,
-                        'sharpeRatio': baseline_sharpe_ratio,
-                        'annualizedReturn': baseline_annualized_return,
+                    result = {
+                        'benchmarkReturns': incomeBase_close,
+                        'dates': trade_date,
+                        'strategyReturns': back_return,
+                        'ShareHolding_stock': dict(share_dict),
+                        'trades': dict(his_dict),
+                        'calculate_stock_profit_loss': calculate_stock_profit_loss_data,
+                        'daily_returns': daily_returns,
+                        'period_returns': period_returns,
+                        'annual_returns': annual_returns,
+                        'stock_performance_attribution': stock_performance_attribution,
+                        'stock_performance_attribution_range': stock_performance_attribution_range,
+                        'stock_performance_attribution_loss_range': stock_performance_attribution_loss_range,
+                        'industry_allocation_timeline': industry_allocation_timeline,
+                        'holdings_timeline': holdings_timeline,
+                        'industry_holdings_analysis': industry_holdings_analysis,
+                        'end_period_market_value_proportion': end_period_market_value_proportion,
+                        'transaction_type_analysis': transaction_type_analysis,
+                        'transaction_type_analysis_sell': transaction_type_analysis_sell,
+                        'metrics': {
+                            'strategy': {
+                                'maxDrawdown': stock_max_back,
+                                'sharpeRatio': stock_sharpe_ratio,
+                                'annualizedReturn': stock_annualized_return,
+                                'winRate': stock_win_rate,
+                                'sortinoRatio': stock_sortino_ratio,
+                            },
+                            'benchmark': {
+                                'maxDrawdown': baseline_max_back,
+                                'sharpeRatio': baseline_sharpe_ratio,
+                                'annualizedReturn': baseline_annualized_return,
+                            }
+                        }
                     }
-                }
-            }
 
-            cleaned_result = clean_data_for_json(result)
-            json_string = json.dumps(cleaned_result, cls=DecimalJSONEncoder, ensure_ascii=False)
-            final_result = json.loads(json_string)
-            return JsonResponse(final_result, status=200)
+                    cleaned_result = clean_data_for_json(result)
+                    json_string = json.dumps(cleaned_result, cls=DecimalJSONEncoder, ensure_ascii=False)
+                    final_result = json.loads(json_string)
+                    print("回测结果已生成，准备返回前端。")
+                    response = JsonResponse(final_result, status=200)
+
+            if log_run_id:
+                if response.status_code >= 400:
+                    _set_backtest_log_status(log_run_id, 'failed', _extract_backtest_log_error(response))
+                else:
+                    _append_backtest_log_line(log_run_id, "回测执行完成。")
+                    _set_backtest_log_status(log_run_id, 'completed')
+
+            return response
 
 
         except Exception as e:
+            if log_run_id:
+                import traceback
+                traceback_info = traceback.format_exc()
+                _append_backtest_log_line(log_run_id, f"回测请求异常: {e}")
+                _append_backtest_log_line(log_run_id, traceback_info)
+                _set_backtest_log_status(log_run_id, 'failed', str(e))
             return JsonResponse({"success": False, "error": str(e)}, status=400)
 
     elif request.method == 'GET':
@@ -1397,7 +1656,6 @@ def delete_strategy(request):
     else:
         return JsonResponse({'success': False, 'message': '只支持 POST 请求'}, status=405)
 
-import threading
 from django.db import transaction
 from django.db.models import Q
 
@@ -1626,6 +1884,7 @@ def execute_single_backtest(strategy_config):
         # 解析因子配置
         botfacname = {}  # bottomfactor格式: [{'name': '上涨幅度', 'operator': '大于', 'value': 5}, ...]
         optionfacname = {}  # optionfactor格式: [{'factor': '基本策略', 'operator': 'macd策略'}]
+        option_data_list = []
 
         # 处理bottomfactor
         if hasattr(strategy_config, 'bottomfactor') and strategy_config.bottomfactor:
@@ -1646,6 +1905,7 @@ def execute_single_backtest(strategy_config):
             try:
                 option_data = parse_factor_config(strategy_config.optionfactor)
                 if isinstance(option_data, list):
+                    option_data_list = option_data
                     # 转换为字典格式 {factor: operator}
                     optionfacname = {item.get('factor', f'strategy_{i}'): str(item.get('operator', ''))
                                      for i, item in enumerate(option_data)
@@ -1662,10 +1922,20 @@ def execute_single_backtest(strategy_config):
         print(f"  - bottomfactor: {botfacname}")
         print(f"  - optionfactor: {optionfacname}")
 
-        # 执行回测
-        from .final_project3_生产环境_备份 import main1
-        main1(init_fund, investment_ratio, hold_stock_num, start_time, end_time,
-              optionfacname, botfacname, sid, uid)
+        strategy_type, strategy_main = resolve_strategy_selection(option_data_list, uid)
+        print(f"  - strategy_type: {strategy_type}")
+
+        strategy_main(
+            init_fund,
+            investment_ratio,
+            hold_stock_num,
+            start_time,
+            end_time,
+            optionfacname,
+            botfacname,
+            sid,
+            uid,
+        )
 
         print(f"策略 {strategy_config.strategyName} 回测执行完成")
 
