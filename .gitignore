@@ -29,3 +29,7 @@ backend_main/backend/supervised_model.pkl
 .DS_Store
 Thumbs.db
 docker/mysql/init/jdgp.sql
+
+
+backend_main/strategy/data/datadir/
+export/
