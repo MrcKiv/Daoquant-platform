@@ -466,15 +466,31 @@ def win_rate(df):
         buy_queue = []
         for _, row in group.iterrows():
             if row['trade_type'] == '买入':
+                buy_price = to_valid_decimal(row['trade_price'])
+                buy_amount = to_valid_int(row['number_of_transactions'])
+                if buy_price is None or buy_amount is None:
+                    print(
+                        f"跳过无效胜率买入记录: st_code={stock}, trade_date={row.get('trade_date')}, "
+                        f"trade_price={row['trade_price']}, number_of_transactions={row['number_of_transactions']}"
+                    )
+                    continue
                 buy_queue.append({
-                    'price': row['trade_price'],
-                    'amount': row['number_of_transactions']
+                    'price': buy_price,
+                    'amount': buy_amount
                 })
             elif row['trade_type'] == '卖出' and buy_queue:
+                sell_price = to_valid_decimal(row['trade_price'])
+                sell_amount = to_valid_int(row['number_of_transactions'])
+                if sell_price is None or sell_amount is None:
+                    print(
+                        f"跳过无效胜率卖出记录: st_code={stock}, trade_date={row.get('trade_date')}, "
+                        f"trade_price={row['trade_price']}, number_of_transactions={row['number_of_transactions']}"
+                    )
+                    continue
                 # 取出最早的买入记录进行匹配
                 buy_record = buy_queue.pop(0)
                 buy_value = buy_record['price'] * buy_record['amount']
-                sell_value = row['trade_price'] * row['number_of_transactions']
+                sell_value = sell_price * sell_amount
 
                 # 计算该笔交易的盈亏
                 if sell_value > buy_value:
@@ -483,6 +499,41 @@ def win_rate(df):
 
     # 避免除零错误
     return win / total if total > 0 else 0.0
+
+
+def to_valid_decimal(value):
+    """Convert supported numeric inputs to a finite Decimal."""
+    if value is None:
+        return None
+
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+
+    try:
+        decimal_value = Decimal(str(value))
+    except Exception:
+        return None
+
+    return decimal_value if decimal_value.is_finite() else None
+
+
+def to_valid_int(value):
+    """Convert numeric inputs to a positive int, otherwise return None."""
+    numeric_value = pd.to_numeric(pd.Series([value]), errors='coerce').iloc[0]
+    if pd.isna(numeric_value):
+        return None
+
+    try:
+        int_value = int(numeric_value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+    return int_value if int_value > 0 else None
 
 
 
@@ -954,7 +1005,7 @@ def calculate_stock_profit_loss(history_data):
     计算股票盈亏统计表
     """
     # 按日期排序
-    sorted_data = sorted(history_data, key=lambda x: x['trade_date'])
+    sorted_data = sorted(history_data, key=lambda x: str(x.get('trade_date') or ''))
 
     # 按股票代码分组存储交易记录
     stock_transactions = {}
@@ -976,10 +1027,17 @@ def calculate_stock_profit_loss(history_data):
         for transaction in transactions:
             trade_type = transaction['trade_type']
             trade_date = transaction['trade_date']
-            trade_price = transaction['trade_price']
-            number_of_transactions = transaction['number_of_transactions']
+            trade_price = to_valid_decimal(transaction.get('trade_price'))
+            number_of_transactions = to_valid_int(transaction.get('number_of_transactions'))
 
             if trade_type == '买入':
+                if trade_price is None or number_of_transactions is None:
+                    print(
+                        f"跳过无效买入记录: st_code={st_code}, trade_date={trade_date}, "
+                        f"trade_price={transaction.get('trade_price')}, "
+                        f"number_of_transactions={transaction.get('number_of_transactions')}"
+                    )
+                    continue
                 # 买入时将记录加入队列
                 buy_queue.append({
                     'date': trade_date,
@@ -987,12 +1045,26 @@ def calculate_stock_profit_loss(history_data):
                     'amount': number_of_transactions
                 })
             elif trade_type == '卖出':
+                if trade_price is None or number_of_transactions is None:
+                    print(
+                        f"跳过无效卖出记录: st_code={st_code}, trade_date={trade_date}, "
+                        f"trade_price={transaction.get('trade_price')}, "
+                        f"number_of_transactions={transaction.get('number_of_transactions')}"
+                    )
+                    continue
                 # 卖出时从队列中匹配买入记录
                 remaining_sell_amount = number_of_transactions
 
                 while remaining_sell_amount > 0 and buy_queue:
                     # 取出最早的买入记录
                     buy_record = buy_queue[0]
+                    if buy_record['price'] is None or buy_record['amount'] <= 0:
+                        print(
+                            f"移除无效买入匹配记录: st_code={st_code}, trade_date={buy_record['date']}, "
+                            f"price={buy_record['price']}, amount={buy_record['amount']}"
+                        )
+                        buy_queue.pop(0)
+                        continue
 
                     # 计算可匹配的数量
                     matched_amount = min(remaining_sell_amount, buy_record['amount'])

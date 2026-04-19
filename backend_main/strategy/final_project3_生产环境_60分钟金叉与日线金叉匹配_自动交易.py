@@ -32,6 +32,20 @@ def append_row(df, row):
     """Compatibility helper for pandas 2 DataFrame row appends."""
     return pd.concat([df, pd.DataFrame([row])], ignore_index=True)
 
+
+def to_finite_float(value):
+    """Convert values to a finite float, returning NaN for invalid inputs."""
+    numeric_value = pd.to_numeric(pd.Series([value]), errors='coerce').iloc[0]
+    try:
+        numeric_value = float(numeric_value)
+    except (TypeError, ValueError):
+        return float('nan')
+
+    if not math.isfinite(numeric_value):
+        return float('nan')
+
+    return numeric_value
+
 # 超参
 min_hold = 0.2  # 最低持股比例
 max_hold_balance = 0.5  # 最高持股比例
@@ -664,10 +678,25 @@ def buy_stock(stocklist, candidate_stock, max_stock_num, remained_money, current
         columns=["st_code", "trade_date", "trade_type", "trade_price", "number_of_transactions", "turnover"],
         dtype=object)
 
+    fund_data = to_finite_float(fund_data)
+    remained_money = to_finite_float(remained_money)
+
+    if pd.isna(fund_data) or fund_data <= 0:
+        print(f"跳过买入: fund_data 无效 -> {fund_data}")
+        return stocklist, 0.0 if pd.isna(remained_money) else remained_money
+
+    if pd.isna(remained_money) or remained_money <= 0:
+        print(f"跳过买入: remained_money 无效 -> {remained_money}")
+        return stocklist, 0.0 if pd.isna(remained_money) else remained_money
+
     # 单只股票最大投入资金
     min_invest_money = fund_data * 0.1
+    if not math.isfinite(min_invest_money) or min_invest_money <= 0:
+        print(f"跳过买入: min_invest_money 无效 -> {min_invest_money}")
+        return stocklist, remained_money
+
     # 设置买入最小持仓资金
-    max_invest_num = remained_money // (min_invest_money)
+    max_invest_num = int(remained_money // min_invest_money) if min_invest_money > 0 else 0
     # 获取当天的股票数据
     invest_stock_data = stock_data[stock_data['trade_date'] == current_date_obj]
     # 计算 change 列大于 0 的行数
@@ -675,7 +704,8 @@ def buy_stock(stocklist, candidate_stock, max_stock_num, remained_money, current
     # 计算 change 列小于 0 的行数
     negative_changes = (invest_stock_data['pct_chg'] <= 0).sum()
     # balance1股票上涨数目与总数的比例。
-    balance1 = positive_changes / (negative_changes + positive_changes)
+    total_changes = negative_changes + positive_changes
+    balance1 = positive_changes / total_changes if total_changes > 0 else 0.0
     # invest_balance投资比例
     invest_balance = decide_investment(balance1, min_hold, max_hold_balance)
     remained_money_invest = remained_money
@@ -713,6 +743,14 @@ def buy_stock(stocklist, candidate_stock, max_stock_num, remained_money, current
     else:
         max_cost = min((remained_money_invest) / num, min_invest_money)  # 每只股票的最大购买金额
 
+    max_cost = to_finite_float(max_cost)
+    if pd.isna(max_cost) or max_cost <= 0:
+        print(
+            f"跳过买入: max_cost 无效 -> max_cost={max_cost}, remained_money={remained_money}, "
+            f"fund_data={fund_data}, num={num}"
+        )
+        return stocklist, remained_money
+
     stocklist = stocklist.reset_index(drop=True)
     print("最终买股列表condidate_stock", candidate_stock)
     while num > 0:
@@ -739,8 +777,8 @@ def buy_stock(stocklist, candidate_stock, max_stock_num, remained_money, current
                 print('无当天数据', candidate_stock['st_code'][i], current_day)
                 continue
 
-            close_price = pd.to_numeric(pd.Series([data.loc[0, 'close']]), errors='coerce').iloc[0]
-            pre_close_price = pd.to_numeric(pd.Series([data.loc[0, 'pre_close']]), errors='coerce').iloc[0]
+            close_price = to_finite_float(data.loc[0, 'close'])
+            pre_close_price = to_finite_float(data.loc[0, 'pre_close'])
 
             if pd.isna(close_price) or close_price <= 0:
                 num = num - 1
@@ -757,7 +795,16 @@ def buy_stock(stocklist, candidate_stock, max_stock_num, remained_money, current
                 num = num - 1
                 continue
             else:
-                share = int(max_cost / (100 * close_price))  # 买入的多少手
+                share_budget = to_finite_float(max_cost / (100 * close_price))
+                if pd.isna(share_budget) or share_budget <= 0:
+                    num = num - 1
+                    print(
+                        f"跳过买入 {candidate_stock['st_code'][i]}: share_budget 无效 -> "
+                        f"share_budget={share_budget}, close={close_price}, max_cost={max_cost}"
+                    )
+                    continue
+
+                share = int(share_budget)  # 买入的多少手
                 if share <= 0:
                     num = num - 1
                     print(f"跳过买入 {candidate_stock['st_code'][i]}: 可买手数不足, close={close_price}, max_cost={max_cost}")
@@ -1169,12 +1216,30 @@ def order(All_stock_data, totalmoney, max_stock_num, start_date, end_date, Optio
 
     print('testmoney', testmoney)
     Basedata = IncomeBaseline(start_date, end_date, Baseline)
+    if Basedata is None:
+        Basedata = pd.DataFrame(columns=['trade_date', 'open'])
+    else:
+        Basedata = Basedata.copy()
+
+    if 'trade_date' in Basedata.columns and not Basedata.empty:
+        basedata_trade_dates = pd.to_datetime(Basedata['trade_date'], errors='coerce')
+        Basedata = Basedata.loc[basedata_trade_dates.notna()].copy()
+        Basedata['trade_date'] = basedata_trade_dates[basedata_trade_dates.notna()].dt.strftime('%Y%m%d').values
+
+    if 'open' in Basedata.columns and not Basedata.empty:
+        Basedata['open'] = pd.to_numeric(Basedata['open'], errors='coerce')
+        Basedata = Basedata.loc[Basedata['open'].notna() & (Basedata['open'] > 0)].reset_index(drop=True)
+
+    if Basedata.empty:
+        print(f"警告: 收益基准 {Baseline} 在 {start_date}-{end_date} 区间没有有效数据")
 
     print("-----------当前日期：" + current_day + "--------------")
     global stock_data
     Stock_data = copy.deepcopy(All_stock_data)
     print("Stock_data",Stock_data)
     count_day = 0
+    stocknum = 0
+    reference_market_capitalization = 0.0
     while True:
         # 每日筛
         if isinstance(current_day, str) and len(current_day) == 8:
@@ -1191,32 +1256,36 @@ def order(All_stock_data, totalmoney, max_stock_num, start_date, end_date, Optio
         stock_data = stock_data.sort_values(by=factors, ascending=False)
 
         # 大盘指标
-        if testmoney < 100 * Basedata['open'][0]:
+        basedata_today = Basedata.loc[Basedata['trade_date'] == str(current_day), 'open']
+        today_open_price = to_finite_float(basedata_today.iloc[0]) if not basedata_today.empty else float('nan')
 
+        if pd.isna(today_open_price) or today_open_price <= 0:
+            assets = testmoney + reference_market_capitalization
             add_rows = {
                 'trade_date': current_day,
-                'reference_market_capitalization': stocknum * 100 *
-                                                   Basedata.loc[Basedata['trade_date'] == current_day, 'open'].values[
-                                                       0],
-                'assets': testmoney + stocknum * 100 *
-                          Basedata.loc[Basedata['trade_date'] == current_day, 'open'].values[0],
-                'profit_and_loss': testmoney + stocknum * 100 *
-                                   Basedata.loc[Basedata['trade_date'] == current_day, 'open'].values[0] - totalmoney,
-                'profit_and_loss_ratio': (testmoney + stocknum * 100 *
-                                          Basedata.loc[Basedata['trade_date'] == current_day, 'open'].values[
-                                              0] - totalmoney) / totalmoney,
+                'reference_market_capitalization': reference_market_capitalization,
+                'assets': assets,
+                'profit_and_loss': assets - totalmoney,
+                'profit_and_loss_ratio': (assets - totalmoney) / totalmoney if totalmoney else 0,
+                'strategy_id': sid, 'user_id': uid
+            }
+            print(f"跳过大盘基准 {current_day}: 未找到有效 open 数据")
+            sc.df_table_baseline = append_row(sc.df_table_baseline, add_rows)
+        elif testmoney < 100 * today_open_price:
+            reference_market_capitalization = stocknum * 100 * today_open_price
+            add_rows = {
+                'trade_date': current_day,
+                'reference_market_capitalization': reference_market_capitalization,
+                'assets': testmoney + reference_market_capitalization,
+                'profit_and_loss': testmoney + reference_market_capitalization - totalmoney,
+                'profit_and_loss_ratio': (testmoney + reference_market_capitalization - totalmoney) / totalmoney,
                 'strategy_id': sid, 'user_id': uid
             }
             sc.df_table_baseline = append_row(sc.df_table_baseline, add_rows)
         else:
-            # print('上证指数开盘价：', Basedata['open'][0])
-            stocknum = int(testmoney / (100 * Basedata['open'][0]))  # 买入的大盘股票数量
-            # print('买入的大盘指标数量：', stocknum)
-            testmoney = testmoney - stocknum * 100 * Basedata['open'][0]
-            # print('买完大盘之后剩下多少钱：', testmoney)
-            reference_market_capitalization = stocknum * 100 * \
-                                              Basedata.loc[Basedata['trade_date'] == current_day, 'open'].values[0]
-            # print('今天的大盘开盘价是多少', reference_market_capitalization)
+            stocknum = int(testmoney / (100 * today_open_price))  # 买入的大盘股票数量
+            testmoney = testmoney - stocknum * 100 * today_open_price
+            reference_market_capitalization = stocknum * 100 * today_open_price
             asserts = testmoney + reference_market_capitalization
             profit_and_loss = asserts - totalmoney
             profit_and_loss_ratio = profit_and_loss / totalmoney
