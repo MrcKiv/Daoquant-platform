@@ -558,27 +558,37 @@ def IncomeBaseline(start_date, end_date, Baseline):
     else:
         end_date = end_date
 
-    if '深证' in Baseline:
-        filtered_data = sc.df_table_index[(sc.df_table_index['st_code'] == '399001.SZ') &
-                                              (sc.df_table_index['trade_date'] >= start_date) &
-                                              (sc.df_table_index['trade_date'] <= end_date)]
-        filtered_data = filtered_data.reset_index(drop=True)
+    if sc.df_table_index is None or sc.df_table_index.empty:
+        return pd.DataFrame()
 
-    if '上证指数' in Baseline:
-        print(1111)
-        filtered_data = sc.df_table_index[(sc.df_table_index['st_code'] == '000001.SH') &
-                                              (sc.df_table_index['trade_date'] >= start_date) &
-                                              (sc.df_table_index['trade_date'] <= end_date)]
-        filtered_data = filtered_data.reset_index(drop=True)
-        print('filtered_data',filtered_data)
+    baseline_text = str(Baseline or '').strip()
+    index_code_candidates = []
 
-    if '创业' in Baseline:
-        filtered_data = sc.df_table_index[(sc.df_table_index['st_code'] == '399006.SZ') &
-                                              (sc.df_table_index['trade_date'] >= start_date) &
-                                              (sc.df_table_index['trade_date'] <= end_date)]
-        filtered_data = filtered_data.reset_index(drop=True)
+    if '沪深300' in baseline_text or '000300' in baseline_text:
+        index_code_candidates = ['000300.SH', '000300']
+    elif '上证50' in baseline_text or '000016' in baseline_text:
+        index_code_candidates = ['000016.SH', '000016']
+    elif '深证' in baseline_text:
+        index_code_candidates = ['399001.SZ', '399001']
+    elif '上证指数' in baseline_text or baseline_text == '上证':
+        index_code_candidates = ['000001.SH', '000001']
+    elif '创业' in baseline_text:
+        index_code_candidates = ['399006.SZ', '399006']
+    else:
+        index_code_candidates = ['000300.SH', '000300']
 
-    return filtered_data
+    index_df = sc.df_table_index.copy()
+    index_df['st_code'] = index_df['st_code'].astype(str).str.strip()
+    code_prefixes = {code.split('.')[0] for code in index_code_candidates}
+    code_mask = index_df['st_code'].isin(index_code_candidates) | index_df['st_code'].str.split('.').str[0].isin(code_prefixes)
+
+    filtered_data = index_df[
+        code_mask &
+        (index_df['trade_date'] >= start_date) &
+        (index_df['trade_date'] <= end_date)
+    ].copy()
+
+    return filtered_data.sort_values(by='trade_date').reset_index(drop=True)
 
 
 # 检查是否存在历史回测数据
@@ -1226,20 +1236,24 @@ def order(All_stock_data, totalmoney, max_stock_num, start_date, end_date, Optio
         Basedata = Basedata.loc[basedata_trade_dates.notna()].copy()
         Basedata['trade_date'] = basedata_trade_dates[basedata_trade_dates.notna()].dt.strftime('%Y%m%d').values
 
-    if 'open' in Basedata.columns and not Basedata.empty:
-        Basedata['open'] = pd.to_numeric(Basedata['open'], errors='coerce')
-        Basedata = Basedata.loc[Basedata['open'].notna() & (Basedata['open'] > 0)].reset_index(drop=True)
+    if not Basedata.empty:
+        close_prices = pd.to_numeric(Basedata['close'], errors='coerce') if 'close' in Basedata.columns else pd.Series(np.nan, index=Basedata.index)
+        open_prices = pd.to_numeric(Basedata['open'], errors='coerce') if 'open' in Basedata.columns else pd.Series(np.nan, index=Basedata.index)
+        Basedata['benchmark_price'] = close_prices.where(close_prices.notna() & (close_prices > 0), open_prices)
+        Basedata = Basedata.loc[Basedata['benchmark_price'].notna() & (Basedata['benchmark_price'] > 0)].reset_index(drop=True)
 
     if Basedata.empty:
         print(f"警告: 收益基准 {Baseline} 在 {start_date}-{end_date} 区间没有有效数据")
+        benchmark_start_price = float('nan')
+    else:
+        benchmark_start_price = to_finite_float(Basedata.loc[0, 'benchmark_price'])
 
     print("-----------当前日期：" + current_day + "--------------")
     global stock_data
     Stock_data = copy.deepcopy(All_stock_data)
     print("Stock_data",Stock_data)
     count_day = 0
-    stocknum = 0
-    reference_market_capitalization = 0.0
+    last_benchmark_price = benchmark_start_price
     while True:
         # 每日筛
         if isinstance(current_day, str) and len(current_day) == 8:
@@ -1256,48 +1270,31 @@ def order(All_stock_data, totalmoney, max_stock_num, start_date, end_date, Optio
         stock_data = stock_data.sort_values(by=factors, ascending=False)
 
         # 大盘指标
-        basedata_today = Basedata.loc[Basedata['trade_date'] == str(current_day), 'open']
-        today_open_price = to_finite_float(basedata_today.iloc[0]) if not basedata_today.empty else float('nan')
+        basedata_today = Basedata.loc[Basedata['trade_date'] == str(current_day), 'benchmark_price']
+        today_benchmark_price = to_finite_float(basedata_today.iloc[-1]) if not basedata_today.empty else float('nan')
 
-        if pd.isna(today_open_price) or today_open_price <= 0:
-            assets = testmoney + reference_market_capitalization
-            add_rows = {
-                'trade_date': current_day,
-                'reference_market_capitalization': reference_market_capitalization,
-                'assets': assets,
-                'profit_and_loss': assets - totalmoney,
-                'profit_and_loss_ratio': (assets - totalmoney) / totalmoney if totalmoney else 0,
-                'strategy_id': sid, 'user_id': uid
-            }
-            print(f"跳过大盘基准 {current_day}: 未找到有效 open 数据")
-            sc.df_table_baseline = append_row(sc.df_table_baseline, add_rows)
-        elif testmoney < 100 * today_open_price:
-            reference_market_capitalization = stocknum * 100 * today_open_price
-            add_rows = {
-                'trade_date': current_day,
-                'reference_market_capitalization': reference_market_capitalization,
-                'assets': testmoney + reference_market_capitalization,
-                'profit_and_loss': testmoney + reference_market_capitalization - totalmoney,
-                'profit_and_loss_ratio': (testmoney + reference_market_capitalization - totalmoney) / totalmoney,
-                'strategy_id': sid, 'user_id': uid
-            }
-            sc.df_table_baseline = append_row(sc.df_table_baseline, add_rows)
+        if not pd.isna(today_benchmark_price) and today_benchmark_price > 0:
+            last_benchmark_price = today_benchmark_price
         else:
-            stocknum = int(testmoney / (100 * today_open_price))  # 买入的大盘股票数量
-            testmoney = testmoney - stocknum * 100 * today_open_price
-            reference_market_capitalization = stocknum * 100 * today_open_price
-            asserts = testmoney + reference_market_capitalization
-            profit_and_loss = asserts - totalmoney
-            profit_and_loss_ratio = profit_and_loss / totalmoney
-            add_rows = {
-                'trade_date': current_day,
-                'reference_market_capitalization': reference_market_capitalization,
-                'assets': asserts,
-                'profit_and_loss': profit_and_loss,
-                'profit_and_loss_ratio': profit_and_loss_ratio,
-                'strategy_id': sid, 'user_id': uid
-            }
-            sc.df_table_baseline = append_row(sc.df_table_baseline, add_rows)
+            print(f"跳过大盘基准 {current_day}: 未找到有效 benchmark_price，沿用上一交易日")
+
+        if pd.isna(benchmark_start_price) or benchmark_start_price <= 0 or pd.isna(last_benchmark_price) or last_benchmark_price <= 0:
+            assets = float(totalmoney)
+        else:
+            assets = float(totalmoney) * (last_benchmark_price / benchmark_start_price)
+
+        reference_market_capitalization = assets
+        profit_and_loss = assets - totalmoney
+        profit_and_loss_ratio = profit_and_loss / totalmoney if totalmoney else 0
+        add_rows = {
+            'trade_date': current_day,
+            'reference_market_capitalization': reference_market_capitalization,
+            'assets': assets,
+            'profit_and_loss': profit_and_loss,
+            'profit_and_loss_ratio': profit_and_loss_ratio,
+            'strategy_id': sid, 'user_id': uid
+        }
+        sc.df_table_baseline = append_row(sc.df_table_baseline, add_rows)
 
         # 卖股：出售持有的股票
         if len(stocklist) > 0:
