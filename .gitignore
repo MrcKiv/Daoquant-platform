@@ -30,6 +30,11 @@ backend_main/backend/supervised_model.pkl
 Thumbs.db
 docker/mysql/init/jdgp.sql
 
-
+#数据文件和导出文件
 backend_main/strategy/data/datadir/
 export/
+
+
+#vscode缓存
+.vscode/
+
