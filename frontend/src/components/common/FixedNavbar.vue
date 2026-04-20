@@ -12,9 +12,6 @@
         <nav class="c-header-nav">
           <ul class="c-header-nav-ul">
             <li><router-link to="/">首页</router-link></li>
-            <li v-if="userStore.hasPermission('admin')">
-              <router-link to="/stock-data-backfill">补全股票数据</router-link>
-            </li>
 
             <!-- 编写策略带下拉 -->
             <li class="dropdown">

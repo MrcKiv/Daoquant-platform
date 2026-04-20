@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import axios from 'axios'
 import Home from '@/views/home.vue'
 import strategyRoutes from './strategy'
-import stockBackfillRoutes from './stockBackfill'
 import userRoutes from './user'
 import manageRoutes from './manage'
 import { useUserStore } from '@/stores/user'
@@ -15,7 +14,6 @@ const routes = [
     component: Home,
     Children:[]},
   ...strategyRoutes,
-  ...stockBackfillRoutes,
   ...userRoutes,
   ...manageRoutes,
   ...membershipRoutes,

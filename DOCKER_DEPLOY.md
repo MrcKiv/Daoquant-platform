@@ -15,7 +15,7 @@
 自动交易模块在默认 Docker 部署中关闭，不影响主站与回测功能。
 
 如果你需要使用 `xtquant` 付费接口补全股票数据，请额外阅读 [XTQUANT_BACKFILL_DEPLOY.md](XTQUANT_BACKFILL_DEPLOY.md)。
-`xtquant` 补数不在 Linux Docker 容器内执行，而是通过 Windows worker 提供服务。
+当前仓库不再提供网页端在线补数入口，补数由服务器管理员手动执行脚本。
 
 ## 推荐部署方式
 
@@ -84,7 +84,7 @@ cd Daoquant-platform
 ## 第四步：创建部署用 `.env`
 
 不要直接复制源机器当前正在使用的私有 `.env`。  
-更稳妥的方式是基于仓库提供的 [.env.example](/D:/Daoquant-platform/.env.example) 新建一份 `.env`。
+更稳妥的方式是基于仓库提供的 [.env.example](.env.example) 新建一份 `.env`。
 
 执行：
 
@@ -127,7 +127,7 @@ DJANGO_CORS_ALLOWED_ORIGINS=http://127.0.0.1:8080,http://localhost:8080,http://1
 
 把上一步导出的 SQL 文件复制到：
 
-[docker/mysql/init](/D:/Daoquant-platform/docker/mysql/init)
+[docker/mysql/init](docker/mysql/init)
 
 例如放成：
 
@@ -333,9 +333,9 @@ docker compose up -d --build
 1. 从当前电脑导出业务数据库为 `jdgp.sql`
 2. 在目标电脑安装 `Git` 和 `Docker Desktop`
 3. 执行 `git clone`
-4. 复制 [.env.example](/D:/Daoquant-platform/.env.example) 为 `.env`
+4. 复制 [.env.example](.env.example) 为 `.env`
 5. 在 `.env` 中加入部署机局域网 IP 相关配置
-6. 把 `jdgp.sql` 放到 [docker/mysql/init](/D:/Daoquant-platform/docker/mysql/init)
+6. 把 `jdgp.sql` 放到 [docker/mysql/init](docker/mysql/init)
 7. 执行 `docker compose up -d --build`
 8. 在部署机上确认 `http://localhost:8080` 可访问
 9. 放行部署机防火墙 `8080`

@@ -62,9 +62,9 @@ npm run dev
 ### 页面空白或接口报错
 检查前后端是否都已启动，以及浏览器控制台 / Django 日志中的错误信息。
 
-### xtquant 补数页面无法启动任务
-如果你使用的是 `xtquant` 付费接口，请不要直接在 Linux Docker 容器里运行补数。
-当前仓库已经改成 `Docker 主站 + Windows worker` 架构，部署步骤见 `XTQUANT_BACKFILL_DEPLOY.md`。
+### 需要补全股票数据
+前端已经移除了在线补数入口。
+如果你使用的是 `xtquant` 付费接口，请由服务器管理员手动运行 `xtquant_backfill.py`，说明见 [XTQUANT_BACKFILL_DEPLOY.md](XTQUANT_BACKFILL_DEPLOY.md)。
 
 ## 建议排查顺序
 
