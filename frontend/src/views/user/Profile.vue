@@ -1,5 +1,5 @@
 <template>
   <div>
-    <h2>策略模拟</h2>
+    <h2>个人资料</h2>
   </div>
 </template>

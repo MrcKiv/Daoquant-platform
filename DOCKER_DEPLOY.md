@@ -14,6 +14,9 @@
 
 自动交易模块在默认 Docker 部署中关闭，不影响主站与回测功能。
 
+如果你需要使用 `xtquant` 付费接口补全股票数据，请额外阅读 [XTQUANT_BACKFILL_DEPLOY.md](XTQUANT_BACKFILL_DEPLOY.md)。
+`xtquant` 补数不在 Linux Docker 容器内执行，而是通过 Windows worker 提供服务。
+
 ## 推荐部署方式
 
 推荐把系统部署在一台稳定在线的电脑上，作为局域网内的服务端。  

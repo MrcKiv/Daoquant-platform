@@ -113,8 +113,8 @@ def main():
     time.sleep(5)
 
     # 4. Open Browser
-    print("🌐 打开个股诊断页面...")
-    webbrowser.open('http://localhost:5173/stock-diagnosis')
+    print("🌐 打开前端首页...")
+    webbrowser.open('http://localhost:5173/')
 
     print("\n✅ 系统启动尝试完成。请保持此窗口开启。")
     print("按 Ctrl+C 停止所有服务 (如果由此脚本启动)")

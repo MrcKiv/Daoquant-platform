@@ -12,7 +12,9 @@
         <nav class="c-header-nav">
           <ul class="c-header-nav-ul">
             <li><router-link to="/">首页</router-link></li>
-            <li><a @click="checkAuthAndGo('/strategy-dev')" class="nav-link">策略研发</a></li>
+            <li v-if="userStore.hasPermission('admin')">
+              <router-link to="/stock-data-backfill">补全股票数据</router-link>
+            </li>
 
             <!-- 编写策略带下拉 -->
             <li class="dropdown">
@@ -30,28 +32,9 @@
               </ul>
             </li>
 
-            <!-- 策略社区下拉 -->
-            <li class="dropdown">
-              <a class="dropdown-trigger">
-                策略社区
-                <svg class="arrow" viewBox="0 0 1024 1024" width="10" height="10">
-                  <path d="M512 640L192 320h640z" fill="currentColor"/>
-                </svg>
-              </a>
-              <ul class="dropdown-menu">
-                <li><a @click="checkAuthAndGo('/strategy-mall')" class="nav-link">策略商城</a></li>
-                <li><a @click="checkAuthAndGo('/strategy-famous')" class="nav-link">名人堂</a></li>
-                <li><a @click="checkAuthAndGo('/strategy-forum')" class="nav-link">策略论坛</a></li>
-              </ul>
-            </li>
-
             <li v-if="userStore.isLoggedIn">
               <router-link to="/user-strategy">我的策略</router-link>
             </li>
-            <li><a @click="checkAuthAndGo('/stock-diagnosis')" class="nav-link">个股诊断</a></li>
-            <li><router-link to="/stock-calendar">股票日历</router-link></li>
-            <li><a @click="checkAuthAndGo('/strategy-simulation')" class="nav-link">策略模拟</a></li>
-            <li><a @click="checkAuthAndGo('/strategy-similar')" class="nav-link">相似股票模拟</a></li>
           </ul>
         </nav>
       </div>

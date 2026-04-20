@@ -22,10 +22,4 @@ urlpatterns = [
     path('csrf_token/', csrf_token_view),
     path('trigger-daily-backtest/', views.trigger_daily_backtest, name='trigger_daily_backtest'),
     path('trigger-single-backtest/', views.trigger_single_backtest, name='trigger_single_backtest'),
-    path('queryClosePrice/', views.queryClosePrice, name='queryClosePrice'),
-    path('getKlineChart/', views.getKlineChart, name='getKlineChart'),
-    path('getSimilar/', views.getSimilar, name='getSimilar'),
-    path('getBase/', views.getBase, name='getBase'),
-    path('getSingleStock/', views.getSingleStock, name='getSingleStock'),
-    path('getSimilarStock/', views.getSimilarStock, name='getSimilarStock'),
 ]

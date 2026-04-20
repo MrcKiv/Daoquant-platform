@@ -1,0 +1,4 @@
+pandas>=1.5.0
+pymysql>=1.1.0
+SQLAlchemy
+xtquant==250516.1.1

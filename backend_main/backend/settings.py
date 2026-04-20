@@ -24,7 +24,6 @@ INSTALLED_APPS = [
     "corsheaders",
     "user",
     "strategy",
-    "stock_analysis",
 ]
 
 if ENABLE_TRADE_MODULE:

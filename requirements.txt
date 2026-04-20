@@ -16,3 +16,4 @@ tornado
 pywinauto
 pycryptodome
 cryptography>=41.0.0
+xtquant==250516.1.1

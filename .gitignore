@@ -3,6 +3,7 @@
 !.env.example
 *.env
 !*.env.example
+.venv-xtquant-backfill/
 
 **/__pycache__/
 *.py[cod]
@@ -38,3 +39,4 @@ export/
 #vscode缓存
 .vscode/
 
+data/
