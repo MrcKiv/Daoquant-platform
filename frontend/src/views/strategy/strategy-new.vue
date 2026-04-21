@@ -5,6 +5,9 @@
       <div class="c-header-wrapper-horizontal">
         <div class="header-logo">策略回测系统</div>
         <ul class="c-header-nav-ul-horizontal">
+          <li>
+            <RouterLink class="nav-link nav-link-home" to="/">首页</RouterLink>
+          </li>
           <li><a :class="['nav-link', current === 'strategy' ? 'active' : '']" @click="current = 'strategy'">策略参数</a></li>
           <li><a :class="['nav-link', current === 'selector' ? 'active' : '']" @click="current = 'selector'">策略选择</a></li>
           <li><a :class="['nav-link', current === 'factor' ? 'active' : '']" @click="current = 'factor'">因子配置</a></li>
@@ -40,8 +43,9 @@
   </div>
 </template>
 
-<script setup>import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+<script setup>
+import { ref, onMounted } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import StrategyConfig from '@/components/strategy_new/StrategyConfig.vue'
 import FactorConfig from '@/components/strategy_new/FactorConfig.vue'
 import StockSelector from '@/components/strategy_new/StockSelector.vue'

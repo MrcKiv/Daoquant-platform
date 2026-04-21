@@ -82,7 +82,7 @@
       <h2 class="title">用户登录</h2>
       <form @submit.prevent="login">
         <label>账号</label>
-        <input v-model="usernumber" placeholder="请输入11位账号" required />
+        <input v-model="usernumber" maxlength="20" placeholder="请输入账号" required />
 
         <label>密码</label>
         <input v-model="password" type="password" placeholder="请输入密码" required />
@@ -119,9 +119,17 @@ const userStore = useUserStore()
 const usernumber = ref('')
 const password = ref('')
 
+const showClosableMessage = (type, message) => {
+  ElMessage({
+    type,
+    message,
+    showClose: true,
+  })
+}
+
 const login = async () => {
-  if (!/^\d{11}$/.test(usernumber.value)) {
-    ElMessage.warning('账号必须是11位纯数字')
+  if (!/^[A-Za-z0-9]+$/.test(usernumber.value)) {
+    showClosableMessage('warning', '账号只能包含数字和大小写字母')
     return
   }
 
@@ -142,13 +150,13 @@ const login = async () => {
       token: token,
     })
 
-    ElMessage.success(res.data.msg || '登录成功')
+    showClosableMessage('success', res.data.msg || '登录成功')
 
     // 登录成功后跳转到首页或其他页面
     const redirect = router.currentRoute.value.query.redirect || '/'
     router.push(redirect)
   } catch (e) {
-    ElMessage.error(e.response?.data?.msg || '登录失败，请检查账号或密码')
+    showClosableMessage('error', e.response?.data?.msg || '登录失败，请检查账号或密码')
   }
 }
 </script>

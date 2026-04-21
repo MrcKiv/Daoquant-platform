@@ -2,11 +2,57 @@
   <div class="stock-selector">
     <h2 class="title">选择策略</h2>
 
+    <section class="template-panel">
+      <div class="template-header">
+        <h3>策略模板</h3>
+        <p>在 StrategyDetail 页面可直接下载普通策略模板和深度学习策略模板，模板内已写入固定入口签名、示例逻辑和 Python 库限制说明。</p>
+      </div>
+
+      <div class="template-grid">
+        <article v-for="profile in templateProfiles" :key="profile.key" class="template-card">
+          <div class="template-card-head">
+            <div class="template-card-title">{{ profile.title }}</div>
+            <div class="template-card-desc">{{ profile.description }}</div>
+          </div>
+          <div class="template-card-meta">
+            推荐库：{{ formatModuleList(profile.recommendedModules) }}
+          </div>
+          <a
+            class="btn-template"
+            :href="profile.downloadPath"
+            :download="profile.downloadName"
+          >
+            下载{{ profile.title }}
+          </a>
+        </article>
+      </div>
+
+      <div class="policy-grid">
+        <article class="policy-card">
+          <h4>平台开放库</h4>
+          <p>标准库子集：{{ formatModuleList(uploadPolicy.allowed.standardLibrary) }}</p>
+          <p>普通策略可用三方库：{{ formatModuleList(uploadPolicy.allowed.thirdParty) }}</p>
+          <p>深度学习额外开放：{{ formatModuleList(uploadPolicy.allowed.deepLearningExtra) }}</p>
+          <p>项目内模块：{{ formatModuleList(uploadPolicy.allowed.projectPrefixes) }}</p>
+        </article>
+
+        <article class="policy-card policy-card-warning">
+          <h4>受限 Python 库</h4>
+          <div class="policy-list">
+            <p v-for="group in restrictedLibraryGroups" :key="group.title">
+              <strong>{{ group.title }}：</strong>{{ formatModuleList(group.modules) }}
+            </p>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section class="upload-panel">
       <div class="upload-copy">
         <h3>上传自定义策略</h3>
-        <p>支持上传 `.py` 文件。文件中需包含 `strategy_main`、`my_strategy_main`、`main`、`run` 之一作为入口函数。</p>
-        <p>入口函数签名需与系统回测入口保持一致：`(Init_fund, Investment_ratio, Hold_stock_num, Start_time, End_time, Optionfacname, Botfacname, sid, uid)`。</p>
+        <p>支持上传 `.py` 文件，建议先基于上方模板修改后再上传。</p>
+        <p>入口函数名称需为 {{ uploadEntryFunctionText }} 之一，签名必须保持为 `strategy_main(Init_fund, Investment_ratio, Hold_stock_num, Start_time, End_time, Optionfacname, Botfacname, sid, uid)`。</p>
+        <p>单文件大小限制 {{ maxUploadSizeText }}，上传时系统会校验 import 是否命中平台开放名单。</p>
       </div>
       <div class="upload-actions">
         <input
@@ -16,13 +62,6 @@
           accept=".py"
           @change="handleStrategyFileChange"
         >
-        <a
-          class="btn-template"
-          :href="templateDownloadUrl"
-          download="daoquant_strategy_template.py"
-        >
-          下载模板
-        </a>
         <button class="btn-upload" :disabled="isUploading" @click="triggerUpload">
           {{ isUploading ? '上传中...' : '上传策略' }}
         </button>
@@ -154,14 +193,71 @@ const BUILTIN_STRATEGIES = [
   { factor: '深度学习策略', operator: '深度学习RL策略', label: '深度学习RL策略' },
 ]
 
+const FALLBACK_UPLOAD_POLICY = {
+  entryFunctions: ['strategy_main', 'my_strategy_main', 'main', 'run'],
+  maxUploadSizeKb: 512,
+  profiles: {
+    regular: {
+      key: 'regular',
+      title: '普通策略模板',
+      description: '适合规则策略、指标策略、因子打分策略和统计模型策略。',
+      downloadPath: '/downloads/daoquant_strategy_template.py',
+      downloadName: 'daoquant_strategy_template.py',
+      recommendedModules: ['numpy', 'pandas', 'scipy', 'sklearn', 'sqlalchemy', 'pymysql', 'strategy.*'],
+    },
+    deep_learning: {
+      key: 'deep_learning',
+      title: '深度学习策略模板',
+      description: '适合使用 PyTorch 做时序评分、特征提取和小型模型推理的策略。',
+      downloadPath: '/downloads/daoquant_deep_learning_strategy_template.py',
+      downloadName: 'daoquant_deep_learning_strategy_template.py',
+      recommendedModules: ['torch', 'numpy', 'pandas', 'scipy', 'sklearn', 'strategy.*'],
+    },
+  },
+  allowed: {
+    standardLibrary: ['math', 'datetime', 'time', 'json', 're', 'copy', 'typing', 'collections'],
+    thirdParty: ['numpy', 'pandas', 'scipy', 'sklearn', 'sqlalchemy', 'pymysql'],
+    deepLearningExtra: ['torch'],
+    projectPrefixes: ['strategy.*'],
+  },
+  restrictedGroups: [
+    {
+      title: '系统与文件能力',
+      modules: ['os', 'sys', 'pathlib', 'shutil', 'tempfile', 'glob', 'importlib', 'subprocess', 'multiprocessing'],
+    },
+    {
+      title: '网络与外部数据',
+      modules: ['requests', 'urllib', 'http', 'socket', 'akshare', 'tushare', 'baostock', 'yfinance'],
+    },
+    {
+      title: '不支持的机器学习与量化扩展',
+      modules: ['tensorflow', 'keras', 'jax', 'xgboost', 'lightgbm', 'catboost', 'backtrader', 'talib'],
+    },
+    {
+      title: '可视化与图像处理',
+      modules: ['matplotlib', 'seaborn', 'plotly', 'cv2', 'PIL'],
+    },
+  ],
+}
+
 const fileInputRef = ref(null)
 const showModal = ref(false)
 const isUploading = ref(false)
 const uploadedStrategies = ref([])
 const selectedFactor = ref('基本策略')
 const selectedOperator = ref('Mark策略')
+const uploadPolicy = ref(FALLBACK_UPLOAD_POLICY)
 const emit = defineEmits(['update:selector'])
-const templateDownloadUrl = '/downloads/daoquant_strategy_template.py'
+
+const templateProfiles = computed(() => Object.values(uploadPolicy.value?.profiles || {}))
+const restrictedLibraryGroups = computed(() => uploadPolicy.value?.restrictedGroups || [])
+const uploadEntryFunctionText = computed(() => (uploadPolicy.value?.entryFunctions || []).join('、'))
+const maxUploadSizeText = computed(() => `${uploadPolicy.value?.maxUploadSizeKb || FALLBACK_UPLOAD_POLICY.maxUploadSizeKb}KB`)
+
+const formatModuleList = modules => {
+  if (!Array.isArray(modules) || modules.length === 0) return '-'
+  return modules.join('、')
+}
 
 const buildUploadedOption = strategy => ({
   factor: '自定义策略',
@@ -315,6 +411,17 @@ const triggerUpload = () => {
   fileInputRef.value?.click()
 }
 
+const fetchUploadPolicy = async () => {
+  try {
+    const response = await axios.get('/api/strategy/uploadStrategyPolicy/', { withCredentials: true })
+    if (response.data?.policy) {
+      uploadPolicy.value = response.data.policy
+    }
+  } catch (error) {
+    console.warn('fetchUploadPolicy fallback:', error)
+  }
+}
+
 const fetchUploadedStrategies = async () => {
   try {
     const response = await axios.get('/api/strategy/listUploadedStrategies/', { withCredentials: true })
@@ -392,6 +499,7 @@ const saveForm = async () => {
 }
 
 onMounted(async () => {
+  await fetchUploadPolicy()
   await fetchUploadedStrategies()
   await loadSavedSelector()
 })
@@ -409,6 +517,7 @@ onMounted(async () => {
   margin-bottom: 20px;
 }
 
+.template-panel,
 .upload-panel,
 .uploaded-panel {
   margin-bottom: 20px;
@@ -418,23 +527,88 @@ onMounted(async () => {
   background: linear-gradient(180deg, #f8fbff 0%, #f3f7fc 100%);
 }
 
-.upload-panel {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
-}
-
+.template-header h3,
 .upload-copy h3,
 .uploaded-header h3 {
   margin: 0 0 10px;
   font-size: 16px;
 }
 
+.template-header p,
 .upload-copy p {
   margin: 0 0 8px;
   color: #425466;
   line-height: 1.6;
+}
+
+.template-grid,
+.policy-grid {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.template-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.policy-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.template-card,
+.policy-card {
+  padding: 16px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e4ebf3;
+}
+
+.template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.template-card-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #15314b;
+}
+
+.template-card-desc,
+.template-card-meta,
+.policy-card p {
+  color: #5b7083;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.policy-card h4 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: #15314b;
+}
+
+.policy-list {
+  display: grid;
+  gap: 8px;
+}
+
+.policy-list p {
+  margin: 0;
+}
+
+.policy-card-warning {
+  border-color: #f5d48d;
+  background: linear-gradient(180deg, #fffaf0 0%, #fff6e0 100%);
+}
+
+.upload-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
 }
 
 .upload-actions {
@@ -646,6 +820,11 @@ onMounted(async () => {
 }
 
 @media (max-width: 960px) {
+  .template-grid,
+  .policy-grid {
+    grid-template-columns: 1fr;
+  }
+
   .upload-panel,
   .uploaded-item {
     flex-direction: column;

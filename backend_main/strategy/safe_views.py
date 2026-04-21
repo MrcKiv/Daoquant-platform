@@ -6,7 +6,11 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import User_Strategy_Configuration
 from .report_cache import delete_backtest_cache
-from .uploaded_strategy_store import list_uploaded_strategies, save_uploaded_strategy
+from .uploaded_strategy_store import (
+    get_upload_strategy_policy,
+    list_uploaded_strategies,
+    save_uploaded_strategy,
+)
 import strategy.mysql_connect as sc
 
 
@@ -137,6 +141,22 @@ def list_uploaded_strategy_files(request):
         }, status=200)
     except Exception as e:
         print(f"list_uploaded_strategy_files error: {e}")
+        traceback.print_exc()
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@csrf_exempt
+def get_uploaded_strategy_policy(request):
+    if request.method != 'GET':
+        return JsonResponse({"success": False, "error": "Only GET is supported."}, status=405)
+
+    try:
+        return JsonResponse({
+            "success": True,
+            "policy": get_upload_strategy_policy(),
+        }, status=200)
+    except Exception as e:
+        print(f"get_uploaded_strategy_policy error: {e}")
         traceback.print_exc()
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 

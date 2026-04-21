@@ -49,6 +49,7 @@
 
   .c-header-nav-ul {
     display: flex;
+    align-items: center;
     justify-content: center;
     gap: 20px;
     list-style: none;
@@ -56,10 +57,22 @@
     margin: 0;
   }
 
+  .c-header-nav-ul > li {
+    display: flex;
+    align-items: center;
+  }
+
+  .nav-item-my-strategy {
+    transform: translateY(-3px);
+  }
+
   .c-header-nav-ul li a {
     color: white;
     text-decoration: none;
     font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
   }
   .c-header-nav-ul li a:hover {
     color: #cccccc;  /* 浅灰色 */
@@ -214,6 +227,9 @@
   color: white;
   text-decoration: none;
   font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
 }
 
 .nav-link:hover {
@@ -221,4 +237,7 @@
 }
 .dropdown-trigger {
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
 }

@@ -6,6 +6,7 @@ import axios from 'axios'
 import 'vue3-carousel/dist/carousel.css'
 
 import ElementPlus from 'element-plus'
+import { ElMessage } from 'element-plus'
 import 'element-plus/dist/index.css'
 
 import { createPinia } from 'pinia'
@@ -23,6 +24,31 @@ axios.defaults.xsrfCookieName = 'csrftoken'
 axios.defaults.xsrfHeaderName = 'X-CSRFToken'
 
 axios.defaults.headers.post['Content-Type'] = 'application/json'
+
+const closableMessageTypes = ['success', 'warning', 'info', 'error']
+
+const withClosableMessageOptions = (options, defaultType) => {
+  if (typeof options === 'string') {
+    return {
+      message: options,
+      type: defaultType,
+      showClose: true,
+    }
+  }
+
+  return {
+    ...(options || {}),
+    type: options?.type || defaultType,
+    showClose: options?.showClose ?? true,
+  }
+}
+
+closableMessageTypes.forEach((type) => {
+  const originalMethod = ElMessage[type]
+  ElMessage[type] = (options, appContext) => {
+    return originalMethod(withClosableMessageOptions(options, type), appContext)
+  }
+})
 
 /* ================================
  * 初始化 CSRF（只做一件事：写 cookie）

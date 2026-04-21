@@ -17,7 +17,7 @@
       <section class="panel create-panel">
         <div class="panel-title">
           <h2>新增账号</h2>
-          <p>新增账号统一使用 11 位数字账号。</p>
+          <p>新增账号支持数字和大小写字母组合。</p>
         </div>
 
         <form class="create-form" @submit.prevent="handleCreateUser">
@@ -25,7 +25,7 @@
           <input v-model="form.name" placeholder="请输入用户名" required />
 
           <label>账号</label>
-          <input v-model="form.usernumber" maxlength="20" placeholder="请输入11位数字账号" required />
+          <input v-model="form.usernumber" maxlength="20" placeholder="请输入账号" required />
 
           <label>密码</label>
           <input v-model="form.password" type="password" placeholder="请输入密码" required />
@@ -239,8 +239,8 @@ const resetPasswordForm = () => {
 }
 
 const handleCreateUser = async () => {
-  if (!/^\d{11}$/.test(form.usernumber)) {
-    ElMessage.warning('新增账号必须是11位纯数字')
+  if (!/^[A-Za-z0-9]+$/.test(form.usernumber)) {
+    ElMessage.warning('新增账号只能包含数字和大小写字母')
     return
   }
 

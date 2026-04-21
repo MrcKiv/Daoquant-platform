@@ -10,6 +10,7 @@ urlpatterns = [
     path('public_strategy/', safe_views.public_strategy, name='publicStrategy'),
     path('getStockSelector/', safe_views.get_stock_selector, name='get_stock_selector'),
     path('listUploadedStrategies/', safe_views.list_uploaded_strategy_files, name='list_uploaded_strategies'),
+    path('uploadStrategyPolicy/', safe_views.get_uploaded_strategy_policy, name='get_uploaded_strategy_policy'),
     path('uploadStrategyFile/', safe_views.upload_strategy_file, name='upload_strategy_file'),
     path('getUserStrategies/', views.getUserStrategies, name='get_user_strategies'),
     path('subscribeStrategy/', views.subscribeStrategy, name='subscribe_strategy'),

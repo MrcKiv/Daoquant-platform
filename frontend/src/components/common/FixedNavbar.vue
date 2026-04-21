@@ -29,7 +29,7 @@
               </ul>
             </li>
 
-            <li v-if="userStore.isLoggedIn">
+            <li v-if="userStore.isLoggedIn" class="nav-item-my-strategy">
               <router-link to="/user-strategy">我的策略</router-link>
             </li>
           </ul>
@@ -75,6 +75,14 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 const userStore = useUserStore()
 const router = useRouter()
 
+const showClosableMessage = (type, message) => {
+  ElMessage({
+    type,
+    message,
+    showClose: true,
+  })
+}
+
 // 获取会员等级文本
 const getMembershipLevelText = (level) => {
   const levelMap = {
@@ -112,11 +120,11 @@ const handleLogout = async () => {
   try {
     await userStore.logout()
 
-    ElMessage.success('退出登录成功')
+    showClosableMessage('success', '退出登录成功')
     router.push('/')
   } catch (error) {
     console.error('登出失败:', error)
-    ElMessage.error('登出失败')
+    showClosableMessage('error', '登出失败')
   }
 }
 </script>

@@ -49,6 +49,14 @@ const form = reactive({
   password: ''
 })
 
+const showClosableMessage = (type, message) => {
+  ElMessage({
+    type,
+    message,
+    showClose: true,
+  })
+}
+
 onMounted(() => {
   if (userStore.hasPermission('admin')) {
     router.replace('/manage/users')
@@ -57,7 +65,7 @@ onMounted(() => {
 
 const handleLogin = async () => {
   if (!form.usernumber || !form.password) {
-    ElMessage.warning('请输入管理员账号和密码')
+    showClosableMessage('warning', '请输入管理员账号和密码')
     return
   }
 
@@ -75,12 +83,12 @@ const handleLogin = async () => {
       token: res.data.token
     })
 
-    ElMessage.success(res.data.msg || '管理员登录成功')
+    showClosableMessage('success', res.data.msg || '管理员登录成功')
 
     const redirect = router.currentRoute.value.query.redirect || '/manage/users'
     router.push(redirect)
   } catch (error) {
-    ElMessage.error(error.response?.data?.msg || '管理员登录失败')
+    showClosableMessage('error', error.response?.data?.msg || '管理员登录失败')
   } finally {
     submitting.value = false
   }

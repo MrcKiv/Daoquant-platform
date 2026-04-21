@@ -1,5 +1,6 @@
 # user/views.py
 import json
+import re
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -60,7 +61,11 @@ def _authenticate_user(usernumber, password):
 def _is_valid_usernumber(usernumber, allow_default_admin=False):
     if allow_default_admin and usernumber == DEFAULT_ADMIN_USERNUMBER:
         return True
-    return isinstance(usernumber, str) and usernumber.isdigit() and len(usernumber) == 11
+    return (
+        isinstance(usernumber, str)
+        and len(usernumber) <= 20
+        and re.fullmatch(r'[A-Za-z0-9]+', usernumber) is not None
+    )
 
 
 def _ensure_default_admin_user():
@@ -209,7 +214,7 @@ def admin_users(request):
         return JsonResponse({'msg': '无效的账号级别'}, status=400)
 
     if not _is_valid_usernumber(usernumber, allow_default_admin=False):
-        return JsonResponse({'msg': '账号必须是11位纯数字'}, status=400)
+        return JsonResponse({'msg': '账号只能包含数字和大小写字母，且长度不能超过20位'}, status=400)
 
     if User.objects.filter(usernumber=usernumber).exists():
         return JsonResponse({'msg': '账号已存在'}, status=400)
