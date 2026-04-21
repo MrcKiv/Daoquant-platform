@@ -375,8 +375,9 @@ onUnmounted(() => {
 <style scoped>
 .user-strategy-container {
     width: 100%; /* 宽度铺满整个屏幕 */
-    padding: 0; /* 移除默认内边距 */
-    margin: 0; /* 移除默认外边距 */
+    min-height: 100vh;
+    padding: 76px 24px 32px;
+    margin-top: -18px;
     box-sizing: border-box; /* 包含内边距和边框在元素的总宽度和高度内 */
 }
 
@@ -384,6 +385,7 @@ onUnmounted(() => {
 .page-title {
   font-size: 24px;
   font-weight: bold;
+  margin-top: 0;
   margin-bottom: 20px;
   color: #333;
 }
@@ -398,6 +400,7 @@ onUnmounted(() => {
     width: calc(33.33% - 40px); /* 每行三个卡牌，减去两边的间距 */
     background-color: #fff; /* 背景颜色 */
     border-radius: 8px; /* 圆角 */
+    padding: 18px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 阴影效果 */
     overflow: hidden; /* 隐藏溢出内容 */
     transition: transform 0.3s; /* 过渡效果 */
@@ -415,7 +418,7 @@ onUnmounted(() => {
   background-color: #f8f9fa;
   border-radius: 8px;
   overflow: hidden;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
 }
 
 .strategy-chart {
@@ -436,7 +439,7 @@ onUnmounted(() => {
 .strategy-title {
   font-size: 16px;
   font-weight: bold;
-  margin: 10px 0;
+  margin: 0 0 8px;
   color: #333;
 }
 
@@ -522,7 +525,8 @@ onUnmounted(() => {
   }
 
   .user-strategy-container {
-    padding: 10px;
+    padding: 72px 16px 24px;
+    margin-top: -10px;
   }
 }
 </style>
