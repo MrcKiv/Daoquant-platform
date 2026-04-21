@@ -147,8 +147,6 @@
         <el-button @click="goBack">返回上一页</el-button>
       </div>
     </div>
-
-    <Lastone />
   </div>
 </template>
 
@@ -158,7 +156,6 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import FixedNavbar from '@/components/common/FixedNavbar.vue'
-import Lastone from '@/components/common/Lastone.vue'
 
 const router = useRouter()
 const userStore = useUserStore()

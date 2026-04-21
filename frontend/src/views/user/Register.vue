@@ -14,12 +14,10 @@
       </p>
     </div>
   </div>
-  <Lastone />
 </template>
 
 <script setup>
 import FixedNavbar from '@/components/common/FixedNavbar.vue'
-import Lastone from '@/components/common/Lastone.vue'
 </script>
 
 <style scoped>

@@ -40,3 +40,4 @@ export/
 .vscode/
 
 data/
+runtime/stock_backfill_host_state.json

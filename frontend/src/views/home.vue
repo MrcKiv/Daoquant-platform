@@ -1,17 +1,13 @@
 <template>
   <div class="home-container">
     <FixedNavbar />
-    <div>
-      <Third />
-      <Lastone />
-    </div>
+    <Third />
   </div>
 </template>
 
 <script setup>
 import FixedNavbar from '@/components/common/FixedNavbar.vue'
 import Third from '@/components/common/Third.vue'
-import Lastone from '@/components/common/Lastone.vue'
 
 import { onMounted } from 'vue'
 import axios from 'axios'

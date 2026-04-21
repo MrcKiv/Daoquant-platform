@@ -88,10 +88,10 @@ const handleSelector = (data) => {
 <style scoped>
 .page-wrapper {
   width: 100%;
-  //min-height: 100vh;
+  /* min-height: 100vh; */
   background: #f5f7fa;
-  //display: flex; /* 启用 Flex 布局 */
-  //flex-direction: column; /* 纵向排列 */
+  /* display: flex; */
+  /* flex-direction: column; */
 }
 
 
@@ -149,7 +149,7 @@ const handleSelector = (data) => {
 }
 
 .main-container {
-  //padding: 24px 40px;
+  /* padding: 24px 40px; */
   width: 100%;
  display: flex;
   justify-content: flex-start; /* 水平靠左 */
@@ -160,7 +160,7 @@ const handleSelector = (data) => {
 .main-box {
   width: 100%;
   margin: 0;
-  //padding: 40px;
+  /* padding: 40px; */
   box-sizing: border-box;
   background: white;
   border-radius: 12px;
